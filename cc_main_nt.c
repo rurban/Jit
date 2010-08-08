@@ -4,7 +4,7 @@
 
 static OP * pp_main();
 
-#if 0 && PERL_VERSION < 13
+#if PERL_VERSION < 13
 #  define PERL_ASYNC_CHECK if (PL_sig_pending) Perl_despatch_signals()
 #else
 #  define PERL_ASYNC_CHECK

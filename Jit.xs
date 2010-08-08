@@ -1,11 +1,13 @@
-/*    Jit.xs
+/*    Jit.xs -*- C -*-
  *
  *    Copyright (C) 2010 by Reini Urban
+ *    JIT the Perl runloop for x86 32bit, amd64 64bit. More CPU's later.
  *
  *    You may distribute under the terms of either the GNU General Public
  *    License or the Artistic License, as specified in the README file.
  *
  *    http://gist.github.com/331867
+ *    http://search.cpan.org/dist/Jit/
  */
 
 #include <EXTERN.h>
@@ -19,15 +21,13 @@
 #define T_CHARARR static unsigned char
 #define ALIGN_16(c) (c%16?(c+(16-c%16)):c)
 
-/* Call near to a jmp table at the end. gcc uses that.
-   The first versions used a simple jmp i.e. call far.
-   Need to time this when it works.
-*/
-/*#define USE_JMP_TABLE*/
-#define STACK_SPACE 0x08
+#define STACK_SPACE 0x08   /* private area, not yet used */
+
+int dispatch_needed(OP* op);
 
 /* When do we need PERL_ASYNC_CHECK?
-   Until 5.13.2  we had it after each and every op, since 5.13.2 only inside certain ops,
+   Until 5.13.2  we had it after each and every op,
+   since 5.13.2 only inside certain ops,
    which need to handle pending signals */
 #if PERL_VERSION < 13
 #define DISPATCH_NEEDED(op) dispatch_needed(op)
@@ -41,8 +41,13 @@
 # define DEB_PRINT_LOC(loc)
 #endif
 
+#if !(defined(__i386__) || defined(_M_IX86) || defined(__x86_64__) || defined(__amd64))
+#error "Only intel supported so far"
+#endif
+/* __amd64 defines __x86_64 */
+
 /*
-C pseudocode
+C pseudocode of the Perl runloop:
 
        threaded:
          my_perl->Iop = <PL_op->op_ppaddr>(my_perl);
@@ -53,7 +58,10 @@ C pseudocode
 	 if (PL_sig_pending) Perl_despatch_signals();
 */
 
-#if (defined(__i386__) || defined(_M_IX86)) && defined(USE_ITHREADS)
+#if (defined(__i386__) || defined(_M_IX86))
+#define CALL_ALIGN 4
+
+#if defined(USE_ITHREADS)
 
 /*
        x86 thr: my_perl in ebx, my_perl->Iop in eax (ebx+4)
@@ -101,7 +109,7 @@ T_CHARARR x86thr_prolog[] = {0x8d,0x4c,0x24,0x04,
 T_CHARARR x86thr_call[]  = {0x89,0x1c,0x24,0xE8};
 			   /* push my_perl, call near offset $PL_op->op_ppaddr */
 T_CHARARR x86thr_save_plop[] = {0x90,0x89,0x43,0x04}; /* save new PL_op into my_perl */
-T_CHARARR x86_nop[]          = {0x90};      /* pad */
+T_CHARARR x86_nop[]          = {0x90};         /* pad */
 /* T_CHARARR x86thr_dispatch_getsig[] = {}; */ /* empty decl fails with msvc */
 T_CHARARR x86thr_dispatch[] = {0x89,0x1e,0x89,0x46,
 			       0x04,0x8b,0x86,0x84,
@@ -121,6 +129,7 @@ T_CHARARR x86thr_epilog[] = {0x83,0xc4,0x10,0x8d,
 
 # define PROLOG 	x86thr_prolog
 # define CALL	 	x86thr_call
+# define JMP	 	x86thr_call
 # define NOP 	        x86_nop
 # define SAVE_PLOP	x86thr_save_plop
 # define DISPATCH_GETSIG x86thr_dispatch_getsig
@@ -129,7 +138,7 @@ T_CHARARR x86thr_epilog[] = {0x83,0xc4,0x10,0x8d,
 # define EPILOG         x86thr_epilog
 
 #endif
-#if (defined(__i386__) || defined(_M_IX86)) && !defined(USE_ITHREADS)
+#if !defined(USE_ITHREADS)
 
 /*
 x86 not-threaded, PL_op in eax, PL_sig_pending temp in ecx
@@ -139,27 +148,18 @@ prolog:
 	89 e5                	movl    %esp,%ebp
 	83 ec 08             	subl    $0x8,%esp    adjust stack space 8
 call:
-#ifdef USE_JMP_TABLE
-	e8 xx xx xx xx		call    pp_? near
-#else
-	ff 25 xx xx xx xx	jmp     *$PL_op->op_ppaddr ; call far
-#endif
+	e9 xx xx xx xx		jump32  $PL_op->op_ppaddr - code - 3
 save_plop:
-        90                      nop
-	a3 xx xx xx xx       	mov    %eax,$PL_op  ;0x4061c4
+	a3 xx xx xx xx       	mov    %eax,$PL_op
 
 dispatch_getsig:
 	8b 0d xx xx xx xx xx	mov    $PL_sig_pending,%ecx
 dispatch:
 	85 c9                	test   %ecx,%ecx
 	74 06                	je     +6
-#ifdef USE_JMP_TABLE
-	e8 xx xx xx xx		call  Perl_despatch_signals
-#else
-	ff 25 xx xx xx xx       jmp   *Perl_despatch_signals
-#endif
+	ff 25 xx xx xx xx       jmp far *Perl_despatch_signals #absolute
 epilog:
-	b8 00 00 00 00       	mov    $0x0,%eax
+	b8 00 00 00 00       	mov    $0x0,%eax 	# clean PL_op
 	c9                   	leave
 	c3                   	ret
 */
@@ -172,37 +172,27 @@ T_CHARARR x86_prolog[] = {0x8d,0x4c,0x24,0x04, /* stack align 8: lea    0x4(%esp
                           0x55,0x89,0xe5,0x51, /* push %ebp; mov %esp, %ebp; push %ecx */
                           0x83,0xec,STACK_SPACE}; /* sub $0x04,%esp */
 #else
-T_CHARARR x86_prolog[] = {0x55,			/* push %ebp; */
-			  0x89,0xe5,		/* mov %esp, %ebp; */
-			/*0x51,*/     		/* push %ecx */
+T_CHARARR x86_prolog[] = {0x55,			/* pushl %ebp; */
+			  0x89,0xe5,		/* movl %esp, %ebp; */
+			/*0x51,*/     		/* pushl %ecx */
                           0x83,0xec,STACK_SPACE};   /* sub $0x04,%esp */
 #endif
-#ifdef USE_JMP_TABLE
-T_CHARARR x86_call[]  = {0xe8};      /* call near offset */
-T_CHARARR x86_jmp[]   = {0xe9};      /* jump32 offset $PL_op->op_ppaddr */
-#else
 T_CHARARR x86_call[]  = {0xe8};      /* call near offset $PL_op->op_ppaddr */
 T_CHARARR x86_jmp[]   = {0xff,0x25}; /* jmp *$PL_op->op_ppaddr */
-#endif
 T_CHARARR x86_save_plop[]  = {0xa3};      /* save new PL_op */
 T_CHARARR x86_nop[]        = {0x90};      /* pad */
 T_CHARARR x86_nop2[]       = {0x90,0x90};      /* jmp pad */
 T_CHARARR x86_dispatch_getsig[] = {0x8b,0x0d};
-#ifdef USE_JMP_TABLE
-T_CHARARR x86_dispatch[] = {0x85,0xc9,0x74,0x06,
-			    0xE8};
-#else
 T_CHARARR x86_dispatch[] = {0x85,0xc9,0x74,0x06,
 			    0xFF,0x25};
-#endif
 T_CHARARR x86_dispatch_post[] = {}; /* fails with msvc */
 # if 0
 T_CHARARR x86_epilog[] = {0x5d,0x8d,0x61,0xfc,   /* restore esp, 8d 61 fc */
 			  0xb8,0x00,0x00,0x00,0x00,
 			  0xc9,0xc3};
 #endif
-T_CHARARR x86_epilog[] = {0x89,0xec,          /* mov    %ebp,%esp */
-                          0x5d,               /* pop    %ebp */
+T_CHARARR x86_epilog[] = {0x89,0xec,          /* movl    %ebp,%esp */
+                          0x5d,               /* popl    %ebp */
 			  0xc3};              /* ret */
 
 # define PROLOG 	x86_prolog
@@ -214,9 +204,155 @@ T_CHARARR x86_epilog[] = {0x89,0xec,          /* mov    %ebp,%esp */
 # define DISPATCH       x86_dispatch
 # define DISPATCH_POST  x86_dispatch_post
 # define EPILOG         x86_epilog
-#endif
 
-int dispatch_needed(OP* op);
+#endif /* threads */
+#endif /* 386 */
+
+#if (defined(__x86_64__) || defined(__amd64)) 
+#define CALL_ALIGN 0
+
+#if !defined(USE_ITHREADS)
+/*
+amd64 not-threaded, PL_op in rax, PL_sig_pending ?
+
+prolog:
+  405164:	55                   	push   %rbp
+  405165:	48 89 e5             	mov    %rsp,%rbp
+or
+  405124:	48 83 ec 08          	sub    $0x8,%rsp
+  405128:	e8 2b 1e 01 00       	callq  416f58 <Perl_pp_enter>
+  40512d:	48 89 05 ec 14 5d 00 	mov    %rax,0x5d14ec(%rip)        # 9d6620 <PL_op>
+  405134:	e8 a5 00 00 00       	callq  4051de <Perl_pp_nextstate>
+  405139:	48 89 05 e0 14 5d 00 	mov    %rax,0x5d14e0(%rip)        # 9d6620 <PL_op>
+  405140:	e8 dd 7f 00 00       	callq  40d122 <Perl_pp_print>
+  405145:	48 89 05 d4 14 5d 00 	mov    %rax,0x5d14d4(%rip)        # 9d6620 <PL_op>
+  40514c:	e8 da 28 01 00       	callq  417a2b <Perl_pp_leave>
+  405151:	c6 05 19 16 5d 00 00 	movb   $0x0,0x5d1619(%rip)        # 9d6771 <PL_tainted>
+  405158:	48 89 05 c1 14 5d 00 	mov    %rax,0x5d14c1(%rip)        # 9d6620 <PL_op>
+  40515f:	5a                   	pop    %rdx
+  405160:	c3                   	retq   
+or
+  4051dc:	c9                   	leaveq 
+  4051dd:	c3                   	retq   
+*/
+
+T_CHARARR amd64_prolog[] = {
+  0x55,			/* push   %rbp */
+  0x48,0x89,0xe5,	/* mov    %rsp, %rbp */
+  0x48,0x83,0xec,STACK_SPACE, /* sub $0x8,%rsp */
+#if PERL_VERSION < 13
+  0x53,			/* push   %rbx */
+  0x31,0xdb             /* xor    %ebx,%ebx */
+#endif
+};
+T_CHARARR amd64_call[]  = {0xe8};      /* callq near offset $PL_op->op_ppaddr */
+T_CHARARR amd64_jmp[]   = {0xff,0x25}; /* jmp *$PL_op->op_ppaddr */
+T_CHARARR amd64_save_plop[]  = {
+  0x48,0x89,0x05  /* mov %rax,0x5d14ec(%rip) #save new PL_op */
+};      
+T_CHARARR amd64_nop[]        = {0x90};      /* pad */
+T_CHARARR amd64_nop2[]       = {0x90,0x90};      /* jmp pad */
+T_CHARARR amd64_dispatch_getsig[] = {0x8b,0x0d};
+T_CHARARR amd64_dispatch[] = {0x85,0xc9,0x74,0x06,
+			      0xFF,0x25};
+T_CHARARR amd64_dispatch_post[] = {}; /* fails with msvc */
+T_CHARARR amd64_epilog[] = {
+#if PERL_VERSION < 13
+  0x5b,			/* pop   %rbx */
+#endif
+  0x89,0xec, 		/* movl    %ebp,%esp */
+  0x5d,    		/* popl    %ebp */
+  0xc3};   		/* ret */
+
+# define PROLOG 	amd64_prolog
+# define CALL	 	amd64_call
+# define JMP	 	amd64_jmp
+# define NOP 	        amd64_nop
+# define SAVE_PLOP	amd64_save_plop
+# define DISPATCH_GETSIG amd64_dispatch_getsig
+# define DISPATCH       amd64_dispatch
+# define DISPATCH_POST  amd64_dispatch_post
+# define EPILOG         amd64_epilog
+
+#endif
+#if defined(USE_ITHREADS)
+/*
+amd64 threaded, PL_op in rax, PL_sig_pending in rbx
+
+  4008f4:	53                   	push   %rbx
+  4008f5:	31 db                	xor    %ebx,%ebx
+  4008f7:	48 89 df             	mov    %rbx,%rdi
+  4008fa:	e8 f9 fe ff ff       	callq  4007f8 <Perl_pp_enter@plt>
+  4008ff:	48 89 df             	mov    %rbx,%rdi
+  400902:	48 89 43 08          	mov    %rax,0x8(%rbx)
+  400906:	e8 bd fe ff ff       	callq  4007c8 <Perl_pp_nextstate@plt>
+  40090b:	48 89 df             	mov    %rbx,%rdi
+  40090e:	48 89 43 08          	mov    %rax,0x8(%rbx)
+  400912:	e8 c1 fe ff ff       	callq  4007d8 <Perl_pp_print@plt>
+  400917:	83 bb 3c 05 00 00 00 	cmpl   $0x0,0x53c(%rbx)
+  40091e:	48 89 43 08          	mov    %rax,0x8(%rbx)
+  400922:	74 08                	je     40092c <main+0x38>
+  400924:	48 89 df             	mov    %rbx,%rdi
+  400927:	e8 8c fe ff ff       	callq  4007b8 <Perl_despatch_signals@plt>
+  40092c:	31 db                	xor    %ebx,%ebx
+  40092e:	48 89 df             	mov    %rbx,%rdi
+  400931:	e8 b2 fe ff ff       	callq  4007e8 <Perl_pp_leave@plt>
+  400936:	83 bb 3c 05 00 00 00 	cmpl   $0x0,0x53c(%rbx)
+  40093d:	48 89 43 08          	mov    %rax,0x8(%rbx)
+  400941:	74 08                	je     40094b <main+0x57>
+  400943:	48 89 df             	mov    %rbx,%rdi
+  400946:	e8 6d fe ff ff       	callq  4007b8 <Perl_despatch_signals@plt>
+  40094b:	5b                   	pop    %rbx
+  40094c:	c3                   	retq   
+*/
+
+T_CHARARR amd64thr_prolog[] = {
+  0x55,			/* push   %rbp */
+  0x48,0x89,0xe5,	/* mov    %rsp, %rbp */
+  0x48,0x83,0xec,STACK_SPACE
+#if PERL_VERSION < 13
+  ,0x53,		/* push   %rbx */
+  0x31,0xdb             /* xor    %ebx,%ebx */
+#endif
+};
+T_CHARARR amd64thr_call[]  = {
+  0x48,0x89,0xdf,	/* mov    %rbx,%rdi */
+  0x48,0x89,0x43,0x08,  /* mov    %rax,0x8(%rbx) */
+  0xe8};      		/* callq near offset $PL_op->op_ppaddr */
+T_CHARARR amd64thr_jmp[]   = {0xff,0x25}; /* jmp *$PL_op->op_ppaddr */
+T_CHARARR amd64thr_save_plop[]  = {
+  0x48,0x89,0x05  /* mov %rax,0x5d14ec(%rip) #save new PL_op */
+};      
+T_CHARARR amd64thr_nop[]        = {0x90};      /* pad */
+T_CHARARR amd64thr_nop2[]       = {0x90,0x90};      /* jmp pad */
+T_CHARARR amd64thr_dispatch_getsig[] = {0x8b,0x0d};
+/*
+  74 08                	je     40092c <main+0x38>
+  48 89 df             	mov    %rbx,%rdi
+  e8 8c fe ff ff       	callq  4007b8 <Perl_despatch_signals@plt>
+  31 db                	xor    %ebx,%ebx
+*/
+T_CHARARR amd64thr_dispatch[] = {0x85,0xc9,0x74,0x06,
+				 0xFF,0x25};
+T_CHARARR amd64thr_dispatch_post[] = {0x31,0xdb}; /* fails with msvc */
+T_CHARARR amd64thr_epilog[] = {0x89,0xec,          /* movl    %ebp,%esp */
+			       0x5d,               /* popl    %ebp */
+			       0xc3};              /* ret */
+
+# define PROLOG 	amd64thr_prolog
+# define CALL	 	amd64thr_call
+# define JMP	 	amd64thr_jmp
+# define NOP 	        amd64thr_nop
+# define SAVE_PLOP	amd64thr_save_plop
+# define DISPATCH_GETSIG amd64thr_dispatch_getsig
+# define DISPATCH       amd64thr_dispatch
+# define DISPATCH_POST  amd64thr_dispatch_post
+# define EPILOG         amd64thr_epilog
+
+#endif /* threads */
+#endif /* x86_64 */
+
+/**********************************************************************************/
 
 int
 dispatch_needed(OP* op) {
@@ -243,9 +379,10 @@ selected with -MJit or (later) with perl -j.
 
 All ops are unrolled in execution order for the CPU cache,
 prefetching is the main advantage of this function.
-The ASYNC check should be done only when necessary. (TODO)
+The ASYNC check is only done when necessary.
 
-For now only implemented for x86 with certain hardcoded my_perl offsets.
+For now only implemented for x86 with certain hardcoded
+my_perl offsets for threaded perls.
 */
 int
 Perl_runops_jit(pTHX)
@@ -254,18 +391,20 @@ Perl_runops_jit(pTHX)
     dVAR;
 #endif
 #ifdef DEBUGGING
+    static int global_loops = 0;
     register int i;
+    FILE* fh;
 #endif
     unsigned int rel;
     unsigned char *code, *c;
-#ifdef USE_JMP_TABLE
-    void **jmp;
-    int n = 0;
-    int n_jmp = 1;
-    int csize;
-#endif
 #ifndef USE_ITHREADS
     void* PL_op_ptr = &PL_op;
+#endif
+#ifdef DEBUGGING
+    fh = fopen("run-jit.c", "w+");
+    fprintf(fh, "void runops_jit_%d (void);\nvoid runops_jit_%d (void){\n", 
+            global_loops, global_loops);
+    global_loops++;
 #endif
 
     /* quirky pass 1: need code size to allocate string.
@@ -277,24 +416,37 @@ Perl_runops_jit(pTHX)
     size += sizeof(PROLOG);
     do {
 #ifdef DEBUGGING
-        printf("pp_%s \t= 0x%x\n",PL_op_name[PL_op->op_type],PL_op->op_ppaddr);
+        printf("#pp_%s \t= 0x%x\n",PL_op_name[PL_op->op_type],PL_op->op_ppaddr);
 #endif
 	if (PL_op->op_type == OP_NULL) continue;
 	size += sizeof(CALL);
-#ifdef USE_JMP_TABLE
-	n_jmp++; /* number of pp ops */
-#endif
 	size += sizeof(void*);
-#ifndef USE_JMP_TABLE
-	while ((size | 0xfffffff0) % 4) {
-	    size++;
-	}
+#if CALL_ALIGN
+	while ((size | 0xfffffff0) % CALL_ALIGN) { size++; }
 #endif
 	size += sizeof(SAVE_PLOP);
+#ifdef DEBUGGING
+# ifdef USE_ITHREADS
+        fprintf(fh, "my_perl->Iop = Perl_pp_%s(my_perl);\n", PL_op_name[PL_op->op_type]);
+#else
+        fprintf(fh, "PL_op = Perl_pp_%s();\n", PL_op_name[PL_op->op_type]);
+# endif
+#endif
 #ifndef USE_ITHREADS
 	size += sizeof(void*);
 #endif
 	if (DISPATCH_NEEDED(PL_op)) {
+
+#ifdef USE_ITHREADS
+# ifdef DEBUGGING
+            fprintf(fh, "if (my_perl->Isig_pending)\n  Perl_despatch_signals(my_perl);\n");
+# endif
+#else
+# ifdef DEBUGGING
+            fprintf(fh, "if (PL_sig_pending)\n  Perl_despatch_signals();\n");
+# endif
+#endif
+
 #ifndef USE_ITHREADS
 	    size += sizeof(DISPATCH_GETSIG);
 	    size += sizeof(void*);
@@ -307,10 +459,11 @@ Perl_runops_jit(pTHX)
 	}
     } while (PL_op = PL_op->op_next);
     size += sizeof(EPILOG);
-#ifdef USE_JMP_TABLE
-    csize = ALIGN_16(size);   /* JMP_TABLE offset */
-    size = csize + (n_jmp*8); /* x86 JMP_TABLE size */
-#endif
+# ifdef DEBUGGING
+    fprintf(fh, "}\n");
+    fclose(fh);
+    /* for stabs: as run-jit.s; gdb file run-jit.o */
+# endif
     PL_op = root;
 #ifdef _WIN32
     code = VirtualAlloc(NULL, size,
@@ -324,25 +477,11 @@ Perl_runops_jit(pTHX)
 #define PUSHc(what) memcpy(code,what,sizeof(what)); code += sizeof(what)
 
     /* pass 2: jit */
-#ifdef USE_JMP_TABLE
-    /* store local jmp table addresses of pp funcs */
-    jmp = (void**)malloc(n_jmp*sizeof(void*));
-    jmp[0] = (void*)&Perl_despatch_signals;
-    n = 1;
-#endif
     PUSHc(PROLOG);
     do {
 	if (PL_op->op_type == OP_NULL) continue;
-#ifdef USE_JMP_TABLE
-	PUSHc(CALL);
-        rel = csize-((code+4)-c); /* offset to jmp[0] - despatch */
-        /* TODO: linear search in array to reduce code size */
-	jmp[n] = (void*)PL_op->op_ppaddr;
-        n++;
-        rel += n*8;
-        PUSHc(&rel);
-#else
-        rel = (unsigned char*)PL_op->op_ppaddr - (code+1) - 4; /* relative offset to addr */
+	/* relative offset to addr */
+        rel = (unsigned char*)PL_op->op_ppaddr - (code+1) - sizeof(void*);
         if (rel > (unsigned int)1<<31) {
 	    PUSHc(JMP);
 	    PUSHc(&PL_op->op_ppaddr);
@@ -351,7 +490,8 @@ Perl_runops_jit(pTHX)
 	    PUSHc(&rel);
         }
 	/* 386 calls prefer 2 nop's afterwards, align it to 4 (0,4,8,c)*/
-	while (((unsigned int)&code | 0xfffffff0) % 4) {
+#if CALL_ALIGN
+	while (((unsigned int)&code | 0xfffffff0) % CALL_ALIGN) {
 	    *(code++) = NOP[0];
 	}
 #endif
@@ -365,12 +505,7 @@ Perl_runops_jit(pTHX)
 	    PUSHc(&PL_sig_pending);
 #endif
 	    PUSHc(DISPATCH);
-#ifdef USE_JMP_TABLE
-            rel = csize-((code+4)-c);
-	    PUSHc(&rel);
-#else
 	    PUSHc(&Perl_despatch_signals);
-#endif
 #ifdef USE_ITHREADS
 	    PUSHc(DISPATCH_POST);
 #endif
@@ -378,26 +513,9 @@ Perl_runops_jit(pTHX)
     } while (PL_op = PL_op->op_next);
     PUSHc(EPILOG);
 
-#ifndef USE_JMP_TABLE
-# ifdef DEBUGGING
-    printf("Perl_despatch_signals \t= 0x%x\n",Perl_despatch_signals);
-    printf("PL_sig_pending \t= 0x%x\n",PL_sig_pending);
-# endif
-#else
-    while (((unsigned int)code | 0xfffffff0) % 16) {
-        *(code++) = NOP[0];
-    }
-# ifdef DEBUGGING
-    printf("Perl_despatch_signals=0x%x, n_jmp=%d\n",Perl_despatch_signals,n_jmp);
-# endif
-    for (i=0; i < n_jmp; i++) {
-        PUSHc(JMP);
-        PUSHc(&jmp[i]);
-        PUSHc(x86_nop2);
-# ifdef DEBUGGING
-        printf("jmp[%d] \t= 0x%x\n",i,jmp[i]);
-# endif
-    }
+#ifdef DEBUGGING
+    printf("#Perl_despatch_signals \t= 0x%x\n",Perl_despatch_signals);
+    printf("#PL_sig_pending \t= 0x%x\n",&PL_sig_pending);
 #endif
     /*I_ASSERT(size == (code - c));*/
     /*size = code - c;*/
@@ -411,17 +529,13 @@ Perl_runops_jit(pTHX)
 
     /* gdb: disassemble code code+200 */
 #ifdef DEBUGGING
-    printf("PL_op    \t= 0x%x [0x%x]\n",&PL_op,PL_op);
-# ifdef USE_JMP_TABLE
-    printf("code()=0x%x size=%d, csize=%d",code,size,csize);
-# else
-    printf("code()=0x%x size=%d",code,size);
-# endif
+    printf("#PL_op    \t= 0x%x\n",&PL_op);
+    printf("#code()=0x%x size=%d",code,size);
     for (i=0; i < size; i++) {
-        if (!(i % 8)) printf("\n");
+        if (!(i % 8)) printf("\n#");
         printf("%02x ",code[i]);
     }
-    printf("\nstart:\n");
+    printf("\n#start:\n");
 #endif
 
     (*((void (*)(pTHX))code))(aTHX);
@@ -440,6 +554,6 @@ MODULE=Jit 	PACKAGE=Jit
 PROTOTYPES: DISABLE
 
 BOOT:
-#if (defined(__i386__) || defined(_M_IX86))
+#if (defined(__i386__) || defined(_M_IX86)) || (defined(__x86_64__) || defined(__amd64))
     PL_runops = Perl_runops_jit;
 #endif

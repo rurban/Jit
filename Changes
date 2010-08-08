@@ -1,6 +1,6 @@
 v0.02 2010-08-06 rurban
 
-Found the call bug with rafl's help - "use stepi" 
+Found the call bug with rafl's help - "use stepi"
   - call = e9 (using offsets!), not ff 25 (jmp far).
 Fixed call near offsets and PL_op offset without USE_JMP_TABLE.
 Fixed initialising PL_op

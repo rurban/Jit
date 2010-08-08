@@ -10,5 +10,3 @@ cc_main_nt.c
 Jit-nt.xs.README
 lib/Jit.pm
 test.pl
-META.yml                                 Module meta-data (added by MakeMaker)
-SIGNATURE                                Public-key signature (added by MakeMaker)
