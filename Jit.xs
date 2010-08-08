@@ -24,10 +24,22 @@
    Need to time this when it works.
 */
 /*#define USE_JMP_TABLE*/
-/* only at certain safepoints? 
+#define STACK_SPACE 0x08
+
+/* When do we need PERL_ASYNC_CHECK?
    Until 5.13.2  we had it after each and every op, since 5.13.2 only inside certain ops,
    which need to handle pending signals */
+#if PERL_VERSION < 13
+#define DISPATCH_NEEDED(op) dispatch_needed(op)
+#else
 #define DISPATCH_NEEDED(op) 0
+#endif
+
+#ifdef DEBUGGING
+# define DEB_PRINT_LOC(loc) printf(loc" \t= 0x%x\n", loc)
+#else
+# define DEB_PRINT_LOC(loc)
+#endif
 
 /*
 C pseudocode
@@ -69,7 +81,7 @@ after calling Perl_despatch_signals, restore my_perl into ebx and push for next
 	83 c4 10             	add    $0x10,%esp
 	83 ec 0c             	sub    $0xc,%esp
 	31 db                	xor    %ebx,%ebx
-	53                   	push   %ebx 
+	53                   	push   %ebx
 
 epilog after final Perl_despatch_signals
 	83 c4 10             	add    $0x10,%esp
@@ -87,10 +99,10 @@ T_CHARARR x86thr_prolog[] = {0x8d,0x4c,0x24,0x04,
 			     0x71,0xfc};
 /* call near not valid */
 T_CHARARR x86thr_call[]  = {0x89,0x1c,0x24,0xE8};
-			   /* push my_perl, call far $PL_op->op_ppaddr */
+			   /* push my_perl, call near offset $PL_op->op_ppaddr */
 T_CHARARR x86thr_save_plop[] = {0x90,0x89,0x43,0x04}; /* save new PL_op into my_perl */
 T_CHARARR x86_nop[]          = {0x90};      /* pad */
-T_CHARARR x86thr_dispatch_getsig[] = {};
+/* T_CHARARR x86thr_dispatch_getsig[] = {}; */ /* empty decl fails with msvc */
 T_CHARARR x86thr_dispatch[] = {0x89,0x1e,0x89,0x46,
 			       0x04,0x8b,0x86,0x84,
 			       0x03,0x00,0x00,0x85,
@@ -125,7 +137,7 @@ x86 not-threaded, PL_op in eax, PL_sig_pending temp in ecx
 prolog:
 	55                   	pushl   %ebp
 	89 e5                	movl    %esp,%ebp
-	83 ec 08             	subl    $0x8,%esp
+	83 ec 08             	subl    $0x8,%esp    adjust stack space 8
 call:
 #ifdef USE_JMP_TABLE
 	e8 xx xx xx xx		call    pp_? near
@@ -152,12 +164,25 @@ epilog:
 	c3                   	ret
 */
 
-T_CHARARR x86_prolog[] = {0x55,0x89,0xe5,0x51,0x83,0xec,0x08}; /* save ebp,esp; adjust stack */
+/* stack is already aligned */
+#if 0
+T_CHARARR x86_prolog[] = {0x8d,0x4c,0x24,0x04, /* stack align 8: lea    0x4(%esp),%ecx */
+                          0x83,0xe4,0xf0,      /* and    $0xfffffff0,%esp */
+                          0xff,0x71,0xfc,      /* pushl  -0x4(%ecx) */
+                          0x55,0x89,0xe5,0x51, /* push %ebp; mov %esp, %ebp; push %ecx */
+                          0x83,0xec,STACK_SPACE}; /* sub $0x04,%esp */
+#else
+T_CHARARR x86_prolog[] = {0x55,			/* push %ebp; */
+			  0x89,0xe5,		/* mov %esp, %ebp; */
+			/*0x51,*/     		/* push %ecx */
+                          0x83,0xec,STACK_SPACE};   /* sub $0x04,%esp */
+#endif
 #ifdef USE_JMP_TABLE
 T_CHARARR x86_call[]  = {0xe8};      /* call near offset */
-T_CHARARR x86_jmp[]   = {0xff,0x25}; /* call $PL_op->op_ppaddr */
+T_CHARARR x86_jmp[]   = {0xe9};      /* jump32 offset $PL_op->op_ppaddr */
 #else
-T_CHARARR x86_call[]   = {0xff,0x25}; /* call $PL_op->op_ppaddr */
+T_CHARARR x86_call[]  = {0xe8};      /* call near offset $PL_op->op_ppaddr */
+T_CHARARR x86_jmp[]   = {0xff,0x25}; /* jmp *$PL_op->op_ppaddr */
 #endif
 T_CHARARR x86_save_plop[]  = {0xa3};      /* save new PL_op */
 T_CHARARR x86_nop[]        = {0x90};      /* pad */
@@ -170,9 +195,15 @@ T_CHARARR x86_dispatch[] = {0x85,0xc9,0x74,0x06,
 T_CHARARR x86_dispatch[] = {0x85,0xc9,0x74,0x06,
 			    0xFF,0x25};
 #endif
-T_CHARARR x86_dispatch_post[] = {};
-T_CHARARR x86_epilog[] = {0x5d,0xb8,0x00,0x00,0x00,0x00,
+T_CHARARR x86_dispatch_post[] = {}; /* fails with msvc */
+# if 0
+T_CHARARR x86_epilog[] = {0x5d,0x8d,0x61,0xfc,   /* restore esp, 8d 61 fc */
+			  0xb8,0x00,0x00,0x00,0x00,
 			  0xc9,0xc3};
+#endif
+T_CHARARR x86_epilog[] = {0x89,0xec,          /* mov    %ebp,%esp */
+                          0x5d,               /* pop    %ebp */
+			  0xc3};              /* ret */
 
 # define PROLOG 	x86_prolog
 # define CALL	 	x86_call
@@ -184,6 +215,27 @@ T_CHARARR x86_epilog[] = {0x5d,0xb8,0x00,0x00,0x00,0x00,
 # define DISPATCH_POST  x86_dispatch_post
 # define EPILOG         x86_epilog
 #endif
+
+int dispatch_needed(OP* op);
+
+int
+dispatch_needed(OP* op) {
+  switch (op->op_type) {
+   /* sync this list with B::CC CC.pm! */
+  case OP_WAIT:
+  case OP_WAITPID:
+  case OP_NEXTSTATE:
+  case OP_AND:
+  case OP_COND_EXPR:
+  case OP_UNSTACK:
+  case OP_OR:
+  case OP_DEFINED:
+  case OP_SUBST:
+    return 1;
+  default:
+    return 0;
+  }
+}
 
 /*
 Faster jitted execution path without loop,
@@ -198,14 +250,19 @@ For now only implemented for x86 with certain hardcoded my_perl offsets.
 int
 Perl_runops_jit(pTHX)
 {
+#ifdef dVAR
     dVAR;
+#endif
+#ifdef DEBUGGING
     register int i;
+#endif
+    unsigned int rel;
     unsigned char *code, *c;
 #ifdef USE_JMP_TABLE
     void **jmp;
     int n = 0;
     int n_jmp = 1;
-    int rel, csize;
+    int csize;
 #endif
 #ifndef USE_ITHREADS
     void* PL_op_ptr = &PL_op;
@@ -244,7 +301,9 @@ Perl_runops_jit(pTHX)
 #endif
 	    size += sizeof(DISPATCH);
 	    size += sizeof(void*);
+#ifdef USE_ITHREADS
 	    size += sizeof(DISPATCH_POST);
+#endif
 	}
     } while (PL_op = PL_op->op_next);
     size += sizeof(EPILOG);
@@ -283,8 +342,14 @@ Perl_runops_jit(pTHX)
         rel += n*8;
         PUSHc(&rel);
 #else
-	PUSHc(CALL);
-	PUSHc(&PL_op->op_ppaddr);
+        rel = (unsigned char*)PL_op->op_ppaddr - (code+1) - 4; /* relative offset to addr */
+        if (rel > (unsigned int)1<<31) {
+	    PUSHc(JMP);
+	    PUSHc(&PL_op->op_ppaddr);
+        } else {
+	    PUSHc(CALL);
+	    PUSHc(&rel);
+        }
 	/* 386 calls prefer 2 nop's afterwards, align it to 4 (0,4,8,c)*/
 	while (((unsigned int)&code | 0xfffffff0) % 4) {
 	    *(code++) = NOP[0];
@@ -306,7 +371,7 @@ Perl_runops_jit(pTHX)
 #else
 	    PUSHc(&Perl_despatch_signals);
 #endif
-#ifndef USE_ITHREADS
+#ifdef USE_ITHREADS
 	    PUSHc(DISPATCH_POST);
 #endif
 	}
@@ -316,6 +381,7 @@ Perl_runops_jit(pTHX)
 #ifndef USE_JMP_TABLE
 # ifdef DEBUGGING
     printf("Perl_despatch_signals \t= 0x%x\n",Perl_despatch_signals);
+    printf("PL_sig_pending \t= 0x%x\n",PL_sig_pending);
 # endif
 #else
     while (((unsigned int)code | 0xfffffff0) % 16) {
@@ -329,13 +395,14 @@ Perl_runops_jit(pTHX)
         PUSHc(&jmp[i]);
         PUSHc(x86_nop2);
 # ifdef DEBUGGING
-        printf("jmp[%d]=0x%x\n",i,jmp[i]);
+        printf("jmp[%d] \t= 0x%x\n",i,jmp[i]);
 # endif
     }
 #endif
     /*I_ASSERT(size == (code - c));*/
     /*size = code - c;*/
 
+    PL_op = root;
     code = c;
 #ifdef HAS_MPROTECT
     mprotect(code,size,PROT_EXEC|PROT_READ);
@@ -356,6 +423,7 @@ Perl_runops_jit(pTHX)
     }
     printf("\nstart:\n");
 #endif
+
     (*((void (*)(pTHX))code))(aTHX);
 
 #ifdef _WIN32
@@ -372,4 +440,6 @@ MODULE=Jit 	PACKAGE=Jit
 PROTOTYPES: DISABLE
 
 BOOT:
+#if (defined(__i386__) || defined(_M_IX86))
     PL_runops = Perl_runops_jit;
+#endif

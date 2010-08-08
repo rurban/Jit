@@ -1,0 +1,16 @@
+v0.02 2010-08-06 rurban
+
+Found the call bug with rafl's help - "use stepi" 
+  - call = e9 (using offsets!), not ff 25 (jmp far).
+Fixed call near offsets and PL_op offset without USE_JMP_TABLE.
+Fixed initialising PL_op
+Small programs do work now
+
+v0.01 2010-08-05 rurban
+
+Non-working version pushed to CPAN being on YAPC::EU. Wanted to show it in a
+lightning talk.
+
+- 2010-03-14 rurban
+
+Created and published at http://gist.github.com/331867

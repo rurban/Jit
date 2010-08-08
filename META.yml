@@ -1,6 +1,6 @@
 --- #YAML:1.0
 name:               Jit
-version:            0.01
+version:            0.02
 abstract:           ~
 author:
     - Reini Urban <perl-compiler@googlegroups.com>
@@ -17,7 +17,7 @@ no_index:
     directory:
         - t
         - inc
-generated_by:       ExtUtils::MakeMaker version 6.55_02
+generated_by:       ExtUtils::MakeMaker version 6.5601
 meta-spec:
     url:      http://module-build.sourceforge.net/META-spec-v1.4.html
     version:  1.4
