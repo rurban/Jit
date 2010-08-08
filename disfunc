@@ -1,0 +1,54 @@
+#!/usr/bin/perl -w
+die "usage: $0 <executable> <function name>\n" unless @ARGV == 2;
+my($exec, $func) = @ARGV;
+my $text = getfunc($exec, $func);
+$text =~ s/^.*^Dump of assembler code.*?$//ms;
+$text =~ s/^End of assembler dump.*$//ms;
+$text =~ s/:[ \t\r]*\n\s*/: /g;
+print redis(\$text);
+exit 0;
+
+sub redis {
+	my $tref = shift;
+	my @lines = map {
+		/\S/
+			? /^0x[0-9a-f]*\s+<(\w+)(?:\+(\d+))?>:\s+(.*\S)/
+				? [ $1, $2 || 0, $3 ]
+				: (warn("re fail: '$_'\n"), return 0)
+			: +()
+	} split /\n/, $$tref;
+	my($label, %label) = (0);
+	$label{$_->[0]}{$_->[1]} = $_->[1] ? 0 : $_->[0]  foreach @lines;
+	foreach (@lines) {
+		for ($_->[2]) {
+			s/,/, /g;
+			s/0x([0-9a-f]{1,2})(?![0-9a-f])/hex($1)/ge;
+			s/0xffff([0-9a-f]{4})/"-" . (0x10000 - hex($1))/ge;
+			s/0x[0-9a-f]+ <(\w+)(?:\+(\d+))?>/
+				(defined($label{$1}) && defined($label{$1}{$2 || 0}))
+					? $label{$1}{$2 || 0} ||= "l" . $label++
+					: $1 . ($2 ? "+$2" : "")
+			/ge;
+		}
+	}
+	join '', map "$_\n", map {
+		map("$_:", grep $_, $label{$_->[0]}{$_->[1]}),
+		"\t$_->[2]"
+	} @lines;
+}
+
+sub getfunc {
+	my($exec, $func) = @_;
+	my $script = <<'EXPECT';
+spawn -noecho gdb [ lindex $argv 0 ]
+expect "(gdb) "
+send "set height 0\r"
+expect "(gdb) "
+send "disass [ lindex $argv 1 ]\r"
+expect "End of assembler dump." { send_user $expect_out(buffer) }
+send "quit\r"
+EXPECT
+	`echo '$script' | expect -f - $exec $func`
+}
+
+# [ string range expect_out(buffer) 0 [ expr [ string length expect_out(buffer) ] - [ string length expect_out(0,string) ] ] ]

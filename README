@@ -1,0 +1,117 @@
+This perl5 jitter is super-simple. The compiled optree is a linked
+list in memory in non-execution order, wide-spread jumps. Additionally
+the calls are indirect.  The jitter properly aligns the run-time calls
+in linear linked-list "exec" order, so that the CPU can prefetch the 
+next instructions, and it inlines some simple ops.
+
+IT DOES NOT WORK YET!
+
+Faster jitted execution path without runops loop, 
+selected with -MJit or (later) with perl -j.
+
+All ops are unrolled in execution order for the CPU cache,
+prefetching is the main advantage of this function.
+The ASYNC check should be done only when necessary. (TODO)
+
+For now only implemented for x86 with certain hardcoded my_perl offsets.
+
+C pseudocode
+
+threaded:
+         my_perl->Iop = <PL_op->op_ppaddr>(my_perl);
+	 if (my_perl->Isig_pending) Perl_despatch_signals(my_perl); 
+=> asm: 
+
+x86 thr: my_perl in ebx, my_perl->Iop in eax (ebx+4)
+prolog: my_perl passed on stack, but force 16-alignment for stack. 
+core2/opteron just love that
+
+	8D 4C 24 04 		leal	4(%esp), %ecx
+ 	83 E4 F0   		andl	$-16, %esp
+ 	FF 71 FC   		pushl	-4(%ecx)
+call:
+  	89 1c 24             	mov    %ebx,(%esp)    ; push my_perl
+	FF 25 xx xx xx xx	jmp    $PL_op->op_ppaddr ; call far 0x5214a4c5<Perl_pp_enter>
+	89 43 04             	mov    %eax,0x4(%ebx) ; save new PL_op into my_perl
+PERL_ASYNC_CHECK:
+	movl	%ebx, (%esi)	;891e
+	movl	%eax, 4(%esi)	;894604
+	movl	900(%esi), %eax ;8b8684030000
+	testl	%eax, %eax	;85C0
+	je	+8   		;7408
+	movl	%esi, (%esp)	;893424
+	call	_Perl_despatch_signals ;FF25xxxxxxxx
+
+after calling Perl_despatch_signals, restore my_perl into ebx and push for next
+	83 c4 10             	add    $0x10,%esp
+	83 ec 0c             	sub    $0xc,%esp
+	31 db                	xor    %ebx,%ebx
+	53                   	push   %ebx 
+
+epilog after final Perl_despatch_signals
+	83 c4 10             	add    $0x10,%esp
+	8d 65 f8             	lea    -0x8(%ebp),%esp
+	59                   	pop    %ecx
+	5b                   	pop    %ebx
+	5d                   	pop    %ebp
+	8d 61 fc             	lea    -0x4(%ecx),%esp
+	c3                   	ret
+
+not-threaded:
+
+         PL_op = <PL_op->op_ppaddr>();
+	 if (PL_sig_pending) Perl_despatch_signals(); 
+
+PL_op in eax, PL_sig_pending in ebx
+Note: It looks like gcc can inline some pp calls better than the jitter.
+enter/nextstate/leave are inlined pretty good.
+
+prolog:
+	55                   	push   %ebp
+	89 e5                	mov    %esp,%ebp
+	83 ec 08             	sub    $0x8,%esp
+call:
+	FF 25 xx xx xx xx	jmp    $PL_op->op_ppaddr ; call far
+	a3 xx xx xx xx       	mov    %eax,$PL_op  ;0x4061c4
+PERL_ASYNC_CHECK:
+	a1 xx xx xx xx       	mov    $PL_sig_pending,%eax
+	85 c0                	test   %eax,%eax
+	74 05                	je     +5
+	e8 xx xx xx xx       	call   Perl_despatch_signals
+epilog:
+	b8 00 00 00 00       	mov    $0x0,%eax
+	c9                   	leave  
+	c3                   	ret   
+
+problems
+far calls to the pp ops break code prefetching, so we have to inline as much as 
+possible, similar to B::CC. Easy to jit are only nextstate, enter, and skip null.
+The best jitter would be a B::CC to assembler backend, but this is hard to get right.
+
+porting
+I created the asm with cc_main and cc_main_nt, see Makefile for objdump and cc_harness 
+rules for gcc assembly.
+
+asm links
+
+http://www.lxhp.in-berlin.de/lhplinks.html
+http://blogs.msdn.com/freik/archive/2005/03/17/398200.aspx
+http://msdn.microsoft.com/en-us/library/7kcdt6fy.aspx
+http://asm.sourceforge.net//resources.html
+http://www.intel.com/design/itanium/manuals/iiasdmanual.htm
+http://www.heyrick.co.uk/assembler/qfinder.html
+
+HL jitters
+
+parrot
+luajit
+psyco / pypy
+tracemonkey
+ruby
+clisp
+
+jit libs
+
+lightning - c macros only
+libjit - c lib
+llvm - compiler framework + lib

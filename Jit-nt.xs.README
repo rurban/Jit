@@ -1,0 +1,213 @@
+/*    Jit-nt.xs: no threads, no JUMPTABLE
+ *    This is just for instructional purposes, the simplified 
+ *    version of the production jitter
+ *
+ *    Copyright (C) 2010 by Reini Urban
+ *
+ *    You may distribute under the terms of either the GNU General Public
+ *    License or the Artistic License, as specified in the README file.
+ *
+ *    http://gist.github.com/331867
+ */
+
+#include <EXTERN.h>
+#include <perl.h>
+#include <XSUB.h>
+
+#ifndef _WIN32
+#include <sys/mman.h>
+#endif
+
+#define T_CHARARR static unsigned char
+
+/*
+int
+Perl_runops_standard(pTHX)
+{
+    dVAR;
+    while ((PL_op = CALL_FPTR(op->op_ppaddr)(aTHX))) {
+    }
+    TAINT_NOT;
+    return 0;
+}
+
+=> unroll to linked list of ops into memory
+C pseudocode
+
+       threaded:
+         my_perl->Iop = <PL_op->op_ppaddr>(my_perl);
+         my_perl->Iop = <PL_op->op_ppaddr>(my_perl);
+         my_perl->Iop = <PL_op->op_ppaddr>(my_perl);
+
+       not-threaded:
+         PL_op = <PL_op->op_ppaddr>();
+         PL_op = <PL_op->op_ppaddr>();
+         PL_op = <PL_op->op_ppaddr>();
+*/
+#if (defined(__i386__) || defined(_M_IX86)) && !defined(USE_ITHREADS)
+
+/*
+x86 not-threaded, PL_op in eax
+
+prolog:
+	55                   	pushl   %ebp
+	89 e5                	movl    %esp,%ebp
+	83 ec 08             	subl    $0x8,%esp
+call:
+	ff 25 xx xx xx xx	jmp     *$PL_op->op_ppaddr ; call far
+save_plop:
+        90                      nop
+	a3 xx xx xx xx       	mov    %eax,$PL_op  ;0x4061c4
+epilog:
+	b8 00 00 00 00       	mov    $0x0,%eax
+	c9                   	leave
+	c3                   	ret
+*/
+
+T_CHARARR x86_prolog[] = {0x55,0x89,0xe5,0x83,0xec,0x08}; /* save ebp,esp; adjust stack */
+T_CHARARR x86_call[]   = {0xff,0x25}; /* call $PL_op->op_ppaddr */
+T_CHARARR x86_save_plop[]  = {0xa3};      /* save new PL_op */
+T_CHARARR x86_nop[]        = {0x90};      /* pad */
+T_CHARARR x86_nop2[]       = {0x90,0x90};      /* jmp pad */
+T_CHARARR x86_epilog[] = {0xb8,0x00,0x00,0x00,0x00,
+			  0xc9,0xc3};
+
+# define PROLOG 	x86_prolog
+# define CALL	 	x86_call
+# define JMP	 	x86_jmp
+# define NOP 	        x86_nop
+# define SAVE_PLOP	x86_save_plop
+# define EPILOG         x86_epilog
+#endif
+
+/*
+Faster jitted execution path without loop,
+selected with -MJit or (later) with perl -j.
+
+All ops are unrolled in execution order for the CPU cache,
+prefetching is the main advantage of this function.
+The ASYNC check should be done only when necessary. (TODO)
+
+For now only implemented for x86 with certain hardcoded my_perl offsets.
+*/
+int
+Perl_runops_jit(pTHX)
+{
+    dVAR;
+    register int i;
+    unsigned char *code, *c;
+    void* PL_op_ptr = &PL_op;
+
+    /* quirky pass 1: need code size to allocate string.
+       PL_slab_count should be near the optree size.
+       Need to time that against an realloc checker in pass 2.
+     */
+    OP * root = PL_op;
+    int size = 0;
+    size += sizeof(PROLOG);
+    do {
+#ifdef DEBUGGING
+        printf("pp_%s \t= 0x%x\n",PL_op_name[PL_op->op_type],PL_op->op_ppaddr);
+#endif
+	if (PL_op->op_type == OP_NULL) continue;
+	size += sizeof(CALL);
+	size += sizeof(void*);
+	while ((size | 0xfffffff0) % 4) {
+	    size++;
+	}
+	size += sizeof(SAVE_PLOP);
+	size += sizeof(void*);
+    } while (PL_op = PL_op->op_next);
+    size += sizeof(EPILOG);
+    PL_op = root;
+#ifdef _WIN32
+    code = VirtualAlloc(NULL, size,
+			MEM_COMMIT | MEM_RESERVE,
+			PAGE_EXECUTE_READWRITE);
+#else
+    code = (char*)malloc(size);
+#endif
+    c = code;
+
+#define PUSHc(what) memcpy(code,what,sizeof(what)); code += sizeof(what)
+
+    /* pass 2: jit */
+    PUSHc(PROLOG);
+    do {
+	if (PL_op->op_type == OP_NULL) continue;
+	PUSHc(CALL);
+	PUSHc(&PL_op->op_ppaddr);
+	/* 386 calls prefer 2 nop's afterwards, align it to 4 (0,4,8,c)*/
+	while (((unsigned int)&code | 0xfffffff0) % 4) {
+	    *(code++) = NOP[0];
+	}
+	PUSHc(SAVE_PLOP);
+	PUSHc(&PL_op_ptr);
+    } while (PL_op = PL_op->op_next);
+    PUSHc(EPILOG);
+
+    /*I_ASSERT(size == (code - c));*/
+    /*size = code - c;*/
+
+    code = c;
+#ifdef HAS_MPROTECT
+    mprotect(code,size,PROT_EXEC|PROT_READ);
+#endif
+    /* XXX Missing. Prepare for execution: flush CPU cache. Needed on some platforms */
+
+    /* gdb: disassemble code code+200 */
+#ifdef DEBUGGING
+    printf("code()=0x%x size=%d, csize=%d",code,size,csize);
+    for (i=0; i < size; i++) {
+        if (!(i % 8)) printf("\n");
+        printf("%02x ",code[i]);
+    }
+    printf("\nstart:\n");
+#endif
+    (*((void (*)(pTHX))code))(aTHX);
+
+#ifdef _WIN32
+    VirtualFree(code, 0, MEM_RELEASE);
+#else
+    free(code);
+#endif
+    TAINT_NOT;
+    return 0;
+}
+
+MODULE=Jit 	PACKAGE=Jit
+
+PROTOTYPES: DISABLE
+
+BOOT:
+    PL_runops = Perl_runops_jit;
+
+
+/*
+       x86 threaded: my_perl in ebx, my_perl->Iop in eax (ebx+4)
+prolog: my_perl passed on stack, but force 16-alignment for stack. core2/opteron just love that
+	8D 4C 24 04 		leal	4(%esp), %ecx
+ 	83 E4 F0   		andl	$-16, %esp
+ 	FF 71 FC   		pushl	-4(%ecx)
+call_far:
+  	89 1c 24             	mov    %ebx,(%esp)    ; push my_perl
+	FF 25 xx xx xx xx	jmp    $PL_op->op_ppaddr ; 0x5214a4c5<Perl_pp_enter>
+save_plop:
+        90                      nop
+        90                      nop
+	89 43 04             	mov    %eax,0x4(%ebx) ; save new PL_op into my_perl
+
+restore my_perl into ebx and push for next
+	83 ec 0c             	sub    $0xc,%esp
+	31 db                	xor    %ebx,%ebx
+	53                   	push   %ebx
+
+epilog
+	8d 65 f8             	lea    -0x8(%ebp),%esp
+	59                   	pop    %ecx
+	5b                   	pop    %ebx
+	5d                   	pop    %ebp
+	8d 61 fc             	lea    -0x4(%ecx),%esp
+	c3                   	ret
+*/
+
