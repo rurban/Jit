@@ -58,7 +58,11 @@ int dispatch_needed(OP* op);
 
 #if (defined(__i386__) || defined(_M_IX86))
 #define JIT_CPU "i386"
+#define JIT_CPU_TYPE 1
 #define CALL_ALIGN 4
+#define CALL_SIZE  4				/* size for the call instruction arg */
+#define MOV_SIZE   4				/* size for the mov instruction arg */
+#undef  MOV_REL
 #ifdef USE_ITHREADS
 # define SIG_PENDING_OFFSET 0x10		/* my_perl->Isig_pending offset */
 # include "i386thr.c"
@@ -69,8 +73,12 @@ int dispatch_needed(OP* op);
 
 /* __amd64 defines __x86_64 */
 #if (defined(__x86_64__) || defined(__amd64)) 
-#define CALL_ALIGN 0
 #define JIT_CPU "amd64"
+#define JIT_CPU_TYPE 2
+#define CALL_ALIGN 0
+#define CALL_SIZE  4				/* size for the call instruction arg */
+#define MOV_SIZE   4				/* size for the mov instruction arg */
+#define MOV_REL
 #ifdef USE_ITHREADS
 # define SIG_PENDING_OFFSET 0x10 		/* my_perl->Isig_pending offset */
 # include "amd64thr.c"
@@ -130,7 +138,7 @@ Perl_runops_jit(pTHX)
     FILE *fh, *stabs;
     char *opname;
 #endif
-    unsigned int rel;
+    U32 rel; /* 4 byte int */
     unsigned char *code, *code_sav;
 #ifndef USE_ITHREADS
     void* PL_op_ptr = &PL_op;
@@ -156,34 +164,36 @@ Perl_runops_jit(pTHX)
 #endif
 	if (PL_op->op_type == OP_NULL) continue;
 	size += sizeof(CALL);
-	size += sizeof(void*);
+	size += CALL_SIZE;
 #if CALL_ALIGN
 	while ((size | 0xfffffff0) % CALL_ALIGN) { size++; }
 #endif
 	size += sizeof(SAVE_PLOP);
 #ifndef USE_ITHREADS
-	size += sizeof(void*);
+	size += MOV_SIZE;
 #endif
 	if (DISPATCH_NEEDED(PL_op)) {
 #ifndef USE_ITHREADS
 	    size += sizeof(DISPATCH_GETSIG);
-	    size += sizeof(void*);
+	    size += MOV_SIZE;
 #endif
 	    size += sizeof(DISPATCH);
-	    size += sizeof(void*);
+	    size += MOV_SIZE;
 #ifdef USE_ITHREADS
 	    size += sizeof(DISPATCH_POST);
 #endif
 	}
     } while (PL_op = PL_op->op_next);
     size += sizeof(EPILOG);
+    while ((size | 0xfffffff0) % 4) { size++; }
     PL_op = root;
 #ifdef _WIN32
     code = VirtualAlloc(NULL, size,
 			MEM_COMMIT | MEM_RESERVE,
 			PAGE_EXECUTE_READWRITE);
 #else
-    code = (char*)malloc(size);
+    code = (char*)memalign(getpagesize(), size*sizeof(char));
+    /*code = (char*)malloc(size);*/
 #endif
     code_sav = code;
 
@@ -225,7 +235,16 @@ Perl_runops_jit(pTHX)
 #endif
 
 #define PUSHc(what) memcpy(code,what,sizeof(what)); code += sizeof(what)
-
+/* force 4 byte for U32, 64bit uses 8 byte for U32 */ 
+#define PUSHcall(what) memcpy(code,what,CALL_SIZE); code += CALL_SIZE
+#ifdef MOV_REL
+# define PUSHmov(where) { \
+    U32 r = (unsigned char*)where - (code+4); \
+    memcpy(code,&r,MOV_SIZE); code += MOV_SIZE; \
+} 
+#else
+# define PUSHmov(what) memcpy(code,what,MOV_SIZE); code += MOV_SIZE
+#endif
     /* pass 2: jit */
     PUSHc(PROLOG);
     do {
@@ -241,28 +260,25 @@ Perl_runops_jit(pTHX)
         fprintf(fh, "PL_op = Perl_pp_%s();\n", opname);
 # endif
 #endif
-        rel = (unsigned char*)PL_op->op_ppaddr - (code+1) - sizeof(void*);
-#ifdef USE_ITHREADS
-        rel -= 3;
-#endif
+        rel = (unsigned char*)PL_op->op_ppaddr - (code+1) - 4;
         if (rel > (unsigned int)PERL_ULONG_MAX) {
 	    PUSHc(JMP);
-	    PUSHc(&PL_op->op_ppaddr);
+	    PUSHcall(&PL_op->op_ppaddr);
+	    /* 386 far calls prefer 2 nop's afterwards, align it to 4 (0,4,8,c)*/
+#if CALL_ALIGN
+	    while (((unsigned int)&code | 0xfffffff0) % CALL_ALIGN) { *(code++) = NOP[0]; }
+#endif
         } else {
 	    PUSHc(CALL);
-	    PUSHc(&rel);
+	    PUSHcall(&rel);
         }
-	/* 386 calls prefer 2 nop's afterwards, align it to 4 (0,4,8,c)*/
-#if CALL_ALIGN
-	while (((unsigned int)&code | 0xfffffff0) % CALL_ALIGN) { *(code++) = NOP[0]; }
-#endif
 #ifdef DEBUGGING
         fprintf(stabs, ".stabn 68,0,%d,%d /* PL_op = eax */\n",
                 line++, code-code_sav);
 #endif
 	PUSHc(SAVE_PLOP);
 #ifndef USE_ITHREADS
-	PUSHc(&PL_op_ptr);
+	PUSHmov(&PL_op);
 #endif
 	if (DISPATCH_NEEDED(PL_op)) {
 #ifdef DEBUGGING
@@ -276,20 +292,21 @@ Perl_runops_jit(pTHX)
 #endif
 #if !defined(USE_ITHREADS) && PERL_VERSION > 6
 	    PUSHc(DISPATCH_GETSIG);
-	    PUSHc(&PL_sig_pending);
+	    PUSHmov(&PL_sig_pending);
 #endif
 #ifdef DEBUGGING
             fprintf(stabs, ".stabn 68,0,%d,%d /* Perl_despatch_signals() */\n",
                     line++, code-code_sav);
 #endif
 	    PUSHc(DISPATCH);
-	    PUSHc(&Perl_despatch_signals);
+	    PUSHmov(&Perl_despatch_signals);
 #ifdef USE_ITHREADS
 	    PUSHc(DISPATCH_POST);
 #endif
 	}
     } while (PL_op = PL_op->op_next);
     PUSHc(EPILOG);
+    while (((unsigned int)&code | 0xfffffff0) % 4) { *(code++) = NOP[0]; }
 
 #ifdef DEBUGGING
     fprintf(fh, "}\n");
@@ -311,7 +328,8 @@ Perl_runops_jit(pTHX)
     PL_op = root;
     code = code_sav;
 #ifdef HAS_MPROTECT
-    mprotect(code,size,PROT_EXEC|PROT_READ|PROT_WRITE);
+    if (mprotect(code,size*sizeof(char),PROT_EXEC|PROT_READ) < 0)
+      croak ("mprotect failed");
 #endif
     /* XXX Missing. Prepare for execution: flush CPU cache. Needed on some platforms */
 
