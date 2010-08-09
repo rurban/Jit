@@ -313,7 +313,7 @@ Perl_runops_jit(pTHX)
     line++;
     fclose(fh);
     fprintf(stabs, ".stabs \"\",36,0,1,%p\n", (char *)size); /* eof */
-    /* for stabs: as run-jit.s; gdb file run-jit.o */
+    /* for stabs: as run-jit.s; gdb add-symbol-file run-jit.o 0 */
     fclose(stabs);
     system("as run-jit.s -o run-jit.o");
 
@@ -322,8 +322,8 @@ Perl_runops_jit(pTHX)
     DEBUG_v( printf("#PL_sig_pending \t= 0x%x\n",&PL_sig_pending) );
 # endif
 #endif
-    /*I_ASSERT(size == (code - c));*/
-    /*size = code - c;*/
+    /*I_ASSERT(size == (code - code_sav));*/
+    /*size = code - code_sav;*/
 
     PL_op = root;
     code = code_sav;
@@ -346,12 +346,12 @@ Perl_runops_jit(pTHX)
 
     (*((void (*)(pTHX))code))(aTHX);
 
+    TAINT_NOT;
 #ifdef _WIN32
     VirtualFree(code, 0, MEM_RELEASE);
 #else
     free(code);
 #endif
-    TAINT_NOT;
     return 0;
 }
 
