@@ -321,7 +321,7 @@ Perl_runops_jit(pTHX)
     PL_op = root;
     code = code_sav;
 #ifdef HAS_MPROTECT
-    if (mprotect(code,size*sizeof(char),PROT_EXEC|PROT_READ) < 0)
+    if (mprotect(code,size*sizeof(char),PROT_EXEC|PROT_READ|PROT_WRITE) < 0)
       croak ("mprotect failed");
 #endif
     /* XXX Missing. Prepare for execution: flush CPU cache. Needed only on ppc32 and ppc64 */
