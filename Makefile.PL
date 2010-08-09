@@ -13,7 +13,7 @@ WriteMakefile(
                        resources =>
                        {
                         license     => 'http://dev.perl.org/licenses/',
-                        repository  => 'http://github.com/rurban/p5-jit/',
+                        repository  => 'http://github.com/rurban/Jit/',
                        },
                       }
     ) : ()),
@@ -24,24 +24,28 @@ WriteMakefile(
              },
 );
 
+sub MY::depend {
+  "Jit.c : i386.c i386thr.c amd64.c amd64thr.c\n";
+}
+
 sub MY::postamble {
   if ($Config{useithreads}) {
-"asm : cc_main.dis
+    "asm : cc_main.dis
 
 cc_main.dis: cc_main
 	objdump -d cc_main > cc_main.dis
 
 cc_main: cc_main.c
-	\$(PERL) -S cc_harness cc_main.c -fno-stack-protector -Os -o cc_main -save-temps -fverbose-asm
-" 
+	\$(PERL) -S cc_harness cc_main.c -fno-stack-protector -g3 -Os -o cc_main -save-temps -fverbose-asm
+"
   } else {
-"asm : cc_main_nt.dis
+    "asm : cc_main_nt.dis
 
 cc_main_nt.dis: cc_main_nt
 	objdump -d cc_main_nt > cc_main_nt.dis
 
 cc_main_nt: cc_main_nt.c
-	\$(PERL) -S cc_harness cc_main_nt.c -fno-stack-protector -Os -o cc_main_nt -save-temps -fverbose-asm
+	\$(PERL) -S cc_harness cc_main_nt.c -fno-stack-protector -g3 -Os -o cc_main_nt -save-temps -fverbose-asm
 "
   }
 }

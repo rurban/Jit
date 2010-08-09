@@ -11,9 +11,9 @@ selected with -MJit or (later) with perl -j.
 
 All ops are unrolled in execution order for the CPU cache,
 prefetching is the main advantage of this function.
-The ASYNC check should be done only when necessary. (TODO)
+The ASYNC check is only done when necessary.
 
-For now only implemented for x86 with certain hardcoded my_perl offsets.
+For now only implemented for x86 and x86_64 with certain hardcoded my_perl offsets.
 
 C pseudocode
 

@@ -1,10 +1,18 @@
+v0.03 2010-08-09 rurban
+
+Start with amd64/x86_64
+Include seperate CPU threaded/non-threaded c files
+Create run-jit.c and run-jit.o with .stabs when DEBUGGING
+More work on i386thr.c (not working)
+
+
 v0.02 2010-08-06 rurban
 
-Found the call bug with rafl's help - "use stepi"
+Found the i386 call bug with rafl's help - "use stepi"
   - call = e9 (using offsets!), not ff 25 (jmp far).
 Fixed call near offsets and PL_op offset without USE_JMP_TABLE.
 Fixed initialising PL_op
-Small programs do work now
+Small i386 (non-threading) programs do work now
 
 v0.01 2010-08-05 rurban
 
