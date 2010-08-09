@@ -125,8 +125,8 @@ Perl_runops_jit(pTHX)
 #endif
 #ifdef DEBUGGING
     static int global_loops = 0;
+    static int line = 0;
     register int i;
-    int line = 3;
     FILE *fh, *stabs;
     char *opname;
 #endif
@@ -144,6 +144,7 @@ Perl_runops_jit(pTHX)
     fh = fopen("run-jit.c", "a");
     fprintf(fh, "void runops_jit_%d (void);\nvoid runops_jit_%d (void){\n", 
             global_loops, global_loops);
+    line += 2;
 #endif
     OP * root = PL_op;
     int size = 0;
@@ -151,7 +152,7 @@ Perl_runops_jit(pTHX)
     do {
 #ifdef DEBUGGING
         opname = PL_op_name[PL_op->op_type];
-        printf("#pp_%s \t= 0x%x\n",opname,PL_op->op_ppaddr);
+        DEBUG_v( printf("#pp_%s \t= 0x%x\n",opname,PL_op->op_ppaddr));
 #endif
 	if (PL_op->op_type == OP_NULL) continue;
 	size += sizeof(CALL);
@@ -193,7 +194,8 @@ Perl_runops_jit(pTHX)
     fprintf(stabs, ".file  \"run-jit.c\"\n");
     fprintf(stabs, ".stabs \"%s\",100,0,0,0\n", "run-jit.c");   /* filename */
     /* jit_func start addr */
-    fprintf(stabs, ".stabs \"runops_jit_%d:F(0,1)\",36,0,2,%p\n", global_loops, code); 
+    fprintf(stabs, ".stabs \"runops_jit_%d:F(0,1)\",36,0,2,%p\n", 
+	    global_loops, code); 
     fprintf(stabs, ".stabs \"Void:t(0,0)=(0,1)\",128,0,0,0\n"); /* stack variables */
 #  if INTVAL_SIZE == 4
     fprintf(stabs, ".stabs \"INTVAL:t(0,1)=(0,5)\",128,0,0,0\n");
@@ -243,7 +245,7 @@ Perl_runops_jit(pTHX)
 #ifdef USE_ITHREADS
         rel -= 3;
 #endif
-        if (rel > (unsigned int)1<<31) {
+        if (rel > (unsigned int)PERL_ULONG_MAX) {
 	    PUSHc(JMP);
 	    PUSHc(&PL_op->op_ppaddr);
         } else {
@@ -291,15 +293,16 @@ Perl_runops_jit(pTHX)
 
 #ifdef DEBUGGING
     fprintf(fh, "}\n");
+    line++;
     fclose(fh);
     fprintf(stabs, ".stabs \"\",36,0,1,%p\n", (char *)size); /* eof */
     /* for stabs: as run-jit.s; gdb file run-jit.o */
     fclose(stabs);
     system("as run-jit.s -o run-jit.o");
 
-    printf("#Perl_despatch_signals \t= 0x%x\n",Perl_despatch_signals);
+    DEBUG_v( printf("#Perl_despatch_signals \t= 0x%x\n",Perl_despatch_signals) );
 # if !defined(USE_ITHREADS) && PERL_VERSION > 6
-    printf("#PL_sig_pending \t= 0x%x\n",&PL_sig_pending);
+    DEBUG_v( printf("#PL_sig_pending \t= 0x%x\n",&PL_sig_pending) );
 # endif
 #endif
     /*I_ASSERT(size == (code - c));*/
@@ -308,19 +311,19 @@ Perl_runops_jit(pTHX)
     PL_op = root;
     code = code_sav;
 #ifdef HAS_MPROTECT
-    mprotect(code,size,PROT_EXEC|PROT_READ);
+    mprotect(code,size,PROT_EXEC|PROT_READ|PROT_WRITE);
 #endif
     /* XXX Missing. Prepare for execution: flush CPU cache. Needed on some platforms */
 
     /* gdb: disassemble code code+200 */
 #ifdef DEBUGGING
-    printf("#PL_op    \t= 0x%x\n",&PL_op);
-    printf("#code()=0x%x size=%d",code,size);
+    DEBUG_v( printf("#PL_op    \t= 0x%x\n",&PL_op) );
+    DEBUG_v( printf("#code()=0x%x size=%d",code,size) );
     for (i=0; i < size; i++) {
-        if (!(i % 8)) printf("\n#");
-        printf("%02x ",code[i]);
+      if (!(i % 8)) DEBUG_v( printf("\n#") );
+      DEBUG_v( printf("%02x ",code[i]) );
     }
-    printf("\n#start:\n");
+    DEBUG_v( printf("\n#run-jit:\n") );
 #endif
 
     (*((void (*)(pTHX))code))(aTHX);

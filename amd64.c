@@ -26,7 +26,7 @@ T_CHARARR amd64_prolog[] = {
   0x55,			/* push   %rbp */
   0x48,0x89,0xe5,	/* mov    %rsp, %rbp */
   0x48,0x83,0xec,STACK_SPACE, /* sub $0x8,%rsp */
-#if PERL_VERSION < 13
+#if (PERL_VERSION > 6) && (PERL_VERSION < 13)
   0x53,			/* push   %rbx */
   0x31,0xdb             /* xor    %ebx,%ebx */
 #endif
@@ -43,7 +43,7 @@ T_CHARARR amd64_dispatch[] = {0x85,0xc9,0x74,0x06,
 			      0xFF,0x25};
 T_CHARARR amd64_dispatch_post[] = {}; /* fails with msvc */
 T_CHARARR amd64_epilog[] = {
-#if PERL_VERSION < 13
+#if (PERL_VERSION > 6) && (PERL_VERSION < 13)
   0x5b,			/* pop   %rbx */
 #endif
   0x89,0xec, 		/* movl    %ebp,%esp */
