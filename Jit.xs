@@ -1,7 +1,7 @@
 /*    Jit.xs -*- C -*-
  *
  *    Copyright (C) 2010 by Reini Urban
- *    JIT the Perl5 runloop. 
+ *    JIT the Perl5 runloop.
  *    Currently for x86 32bit, amd64 64bit. More CPU's later.
  *
  *    You may distribute under the terms of either the GNU General Public
@@ -17,6 +17,9 @@
 
 #ifndef _WIN32
 #include <sys/mman.h>
+#endif
+#if defined(DEBUGGING) && defined(__GNUC__)
+#include <sys/stat.h>
 #endif
 
 #define T_CHARARR static unsigned char
@@ -64,7 +67,7 @@ int dispatch_needed(OP* op);
 
 #if (defined(__i386__) || defined(_M_IX86))
 #define JIT_CPU "i386"
-#define JIT_CPU_TYPE 1
+#define JIT_CPU_X86
 #define CALL_ALIGN 4
 #undef  MOV_REL
 #ifdef USE_ITHREADS
@@ -75,9 +78,9 @@ int dispatch_needed(OP* op);
 #endif
 
 /* __amd64 defines __x86_64 */
-#if (defined(__x86_64__) || defined(__amd64)) 
+#if (defined(__x86_64__) || defined(__amd64))
 #define JIT_CPU "amd64"
-#define JIT_CPU_TYPE 2
+#define JIT_CPU_AMD64
 #define CALL_ALIGN 0
 #define MOV_REL
 #ifdef USE_ITHREADS
@@ -95,21 +98,22 @@ int dispatch_needed(OP* op);
 
 int
 dispatch_needed(OP* op) {
-  switch (op->op_type) {
-   /* sync this list with B::CC CC.pm! */
-  case OP_WAIT:
-  case OP_WAITPID:
-  case OP_NEXTSTATE:
-  case OP_AND:
-  case OP_COND_EXPR:
-  case OP_UNSTACK:
-  case OP_OR:
-  case OP_DEFINED:
-  case OP_SUBST:
-    return 1;
-  default:
-    return 0;
-  }
+    return 0; /* for TESTING only */
+    switch (op->op_type) {
+        /* sync this list with B::CC CC.pm! */
+    case OP_WAIT:
+    case OP_WAITPID:
+    case OP_NEXTSTATE:
+    case OP_AND:
+    case OP_COND_EXPR:
+    case OP_UNSTACK:
+    case OP_OR:
+    case OP_DEFINED:
+    case OP_SUBST:
+        return 1;
+    default:
+        return 0;
+    }
 }
 
 /*
@@ -121,7 +125,7 @@ prefetching is the main advantage of this function.
 The ASYNC check is only done when necessary.
 
 For now only implemented for x86/amd64 with certain hardcoded
-my_perl offsets for threaded perls. 
+my_perl offsets for threaded perls.
 XXX Need to check offsets for older threaded perls.
 */
 int
@@ -136,14 +140,15 @@ Perl_runops_jit(pTHX)
     register int i;
     FILE *fh;
     char *opname;
-#if defined(DEBUGGING) && defined(__GCC__)
+#if defined(DEBUGGING) && defined(__GNUC__)
     FILE *stabs;
 #endif
 #endif
     U32 rel; /* 4 byte int */
+    int dispatch = 0;
     unsigned char *code, *code_sav;
-#ifndef USE_ITHREADS
-    void* PL_op_ptr = &PL_op;
+#if !defined(MOV_REL) && !defined(USE_ITHREADS)
+    void *PL_op_ptr = &PL_op;
 #endif
 
     /* quirky pass 1: need code size to allocate string.
@@ -152,7 +157,7 @@ Perl_runops_jit(pTHX)
      */
 #ifdef DEBUGGING
     fh = fopen("run-jit.c", "a");
-    fprintf(fh, "void runops_jit_%d (void);\nvoid runops_jit_%d (void){\n", 
+    fprintf(fh, "void runops_jit_%d (void);\nvoid runops_jit_%d (void){\n",
             global_loops, global_loops);
     line += 2;
 #endif
@@ -175,6 +180,7 @@ Perl_runops_jit(pTHX)
 	size += MOV_SIZE;
 #endif
 	if (DISPATCH_NEEDED(PL_op)) {
+            dispatch++;
 #ifndef USE_ITHREADS
 	    size += sizeof(DISPATCH_GETSIG);
 	    size += MOV_SIZE;
@@ -196,13 +202,13 @@ Perl_runops_jit(pTHX)
 #else
     /* memalign and getpagesize certainly need a Makefile.PL/configure check */
     code = (char*)memalign(getpagesize(), size*sizeof(char));
-    /* amd64/linux disallows mprotect'ing an unaligned heap. 
+    /* amd64/linux disallows mprotect'ing an unaligned heap.
        We NEED to start it in a fresh new page. */
     /*code = (char*)malloc(size);*/
 #endif
     code_sav = code;
 
-#if defined(DEBUGGING) && defined(__GCC__)
+#if defined(DEBUGGING) && defined(__GNUC__)
     stabs = fopen("run-jit.s", "a");
     /* filename info */
     fprintf(stabs, ".data\n.text\n");       			/* darwin needs that */
@@ -210,25 +216,25 @@ Perl_runops_jit(pTHX)
     fprintf(stabs, ".stabs \"%s\",100,0,0,0\n", "run-jit.c");   /* filename */
     /* jit_func start addr */
     fprintf(stabs, ".stabs \"runops_jit_%d:F(0,1)\",36,0,2,%p\n",
-	    global_loops, code); 
+	    global_loops, code);
     fprintf(stabs, ".stabs \"Void:t(0,0)=(0,1)\",128,0,0,0\n"); /* stack variable types */
     fprintf(stabs, ".stabs \"struct op:t(0,5)=*(0,6)\",128,0,0,0\n");
 # ifdef USE_ITHREADS
     fprintf(stabs, ".stabs \"PerlInterpreter:S(0,12)\",38,0,0,%p\n", /* variable in data section */
             (char*)&my_perl);
 # endif
-    fprintf(stabs, ".stabn 68,0,1,0\n");
+    fprintf(stabs, ".stabn 68,0,%d,0\n", line);
     global_loops++;
 #endif
 
 #define PUSHc(what) memcpy(code,what,sizeof(what)); code += sizeof(what)
-/* force 4 byte for U32, 64bit uses 8 byte for U32 */ 
+/* force 4 byte for U32, 64bit uses 8 byte for U32 */
 #define PUSHcall(what) memcpy(code,what,CALL_SIZE); code += CALL_SIZE
-#ifdef MOV_REL
+#ifdef MOV_REL /* amd64 */
 # define PUSHmov(where) { \
     U32 r = (unsigned char*)where - (code+4); \
     memcpy(code,&r,MOV_SIZE); code += MOV_SIZE; \
-} 
+}
 #else
 # define PUSHmov(what) memcpy(code,what,MOV_SIZE); code += MOV_SIZE
 #endif
@@ -240,9 +246,9 @@ Perl_runops_jit(pTHX)
 	/* relative offset to addr */
 #ifdef DEBUGGING
         opname = PL_op_name[PL_op->op_type];
-# if defined(DEBUGGING) && defined(__GCC__)
-        fprintf(stabs, ".stabn 68,0,%d,%d /* call pp_%s */\n", 
-                line, code-code_sav, opname);
+# if defined(DEBUGGING) && defined(__GNUC__)
+        fprintf(stabs, ".stabn 68,0,%d,%d /* call pp_%s */\n",
+                ++line, code-code_sav, opname);
 # endif
 # ifdef USE_ITHREADS
         fprintf(fh, "my_perl->Iop = Perl_pp_%s(my_perl);\n", opname);
@@ -262,14 +268,20 @@ Perl_runops_jit(pTHX)
 	    PUSHc(CALL);
 	    PUSHcall(&rel);
         }
-#if defined(DEBUGGING) && defined(__GCC__)
+#if defined(DEBUGGING) && defined(__GNUC__)
         fprintf(stabs, ".stabn 68,0,%d,%d /* PL_op = eax */\n",
-                line++, code-code_sav);
+                ++line, code-code_sav);
 #endif
+
 	PUSHc(SAVE_PLOP);
-#ifndef USE_ITHREADS
-	PUSHmov(&PL_op); /* was PL_op_ptr on i386 */ 
+#ifndef USE_ITHREADS		/* threaded we know the target location: %ebx+4 */
+# ifndef MOV_REL
+        PUSHmov(&PL_op_ptr);
+# else
+        PUSHmov(&PL_op);
+# endif
 #endif
+
 	if (DISPATCH_NEEDED(PL_op)) {
 #ifdef DEBUGGING
 # ifdef USE_ITHREADS
@@ -277,18 +289,18 @@ Perl_runops_jit(pTHX)
 # else
             fprintf(fh, "if (PL_sig_pending)\n  Perl_despatch_signals();\n");
 # endif
-# if defined(DEBUGGING) && defined(__GCC__)
+# if defined(DEBUGGING) && defined(__GNUC__)
             fprintf(stabs, ".stabn 68,0,%d,%d /* if (PL_sig_pending) */\n",
-                    line++, code-code_sav);
+                    ++line, code-code_sav);
 # endif
 #endif
 #if !defined(USE_ITHREADS) && PERL_VERSION > 6
 	    PUSHc(DISPATCH_GETSIG);
 	    PUSHmov(&PL_sig_pending);
 #endif
-#if defined(DEBUGGING) && defined(__GCC__)
+#if defined(DEBUGGING) && defined(__GNUC__)
             fprintf(stabs, ".stabn 68,0,%d,%d /* Perl_despatch_signals() */\n",
-                    line++, code-code_sav);
+                    ++line, code-code_sav);
 #endif
 	    PUSHc(DISPATCH);
 	    PUSHmov(&Perl_despatch_signals);
@@ -304,15 +316,18 @@ Perl_runops_jit(pTHX)
     fprintf(fh, "}\n");
     line++;
     fclose(fh);
-# if defined(DEBUGGING) && defined(__GCC__)
+# if defined(DEBUGGING) && defined(__GNUC__)
     fprintf(stabs, ".stabs \"\",36,0,1,%p\n", (char *)size); /* eof */
     /* for stabs: as run-jit.s; gdb add-symbol-file run-jit.o 0 */
     fclose(stabs);
     system("as run-jit.s -o run-jit.o");
 # endif
-    DEBUG_v( printf("#Perl_despatch_signals \t= 0x%x\n",Perl_despatch_signals) );
-# if !defined(USE_ITHREADS) && PERL_VERSION > 6
+# if (PERL_VERSION > 6) && (PERL_VERSION < 13)
+    DEBUG_v( printf("#Perl_despatch_signals \t= 0x%x (%dx)\n",
+                    Perl_despatch_signals, dispatch) );
+#  if !defined(USE_ITHREADS)
     DEBUG_v( printf("#PL_sig_pending \t= 0x%x\n",&PL_sig_pending) );
+#  endif
 # endif
 #endif
     /*I_ASSERT(size == (code - code_sav));*/
@@ -331,10 +346,10 @@ Perl_runops_jit(pTHX)
     DEBUG_v( printf("#PL_op    \t= 0x%x\n",&PL_op) );
     DEBUG_v( printf("#code()=0x%x size=%d",code,size) );
     for (i=0; i < size; i++) {
-      if (!(i % 8)) DEBUG_v( printf("\n#") );
-      DEBUG_v( printf("%02x ",code[i]) );
+        if (!(i % 8)) DEBUG_v( printf("\n#") );
+        DEBUG_v( printf("%02x ",code[i]) );
     }
-    DEBUG_v( printf("\n#run-jit:\n") );
+    DEBUG_v( printf("\n#runops_jit_%d\n", global_loops-1) );
 #endif
 
     (*((void (*)(pTHX))code))(aTHX);
@@ -354,13 +369,18 @@ PROTOTYPES: DISABLE
 
 BOOT:
 #ifdef DEBUGGING
+# ifdef __GNUC__
+    struct stat statbuf;
+# endif
     unlink("run-jit.c");
-# if defined(DEBUGGING) && defined(__GCC__)
-    unlink("run-jit.s");
-    unlink("run-jit.o");
+# ifdef __GNUC__
+    if (!stat("run-jit.s", &statbuf))
+        unlink("run-jit.s");
+    if (!stat("run-jit.o", &statbuf))
+        unlink("run-jit.o");
 # endif
 #endif
 #ifdef JIT_CPU
-    sv_setsv(get_sv("Jit::CPU", GV_ADD), newSVpv(JIT_CPU, 0)); 
+    sv_setsv(get_sv("Jit::CPU", GV_ADD), newSVpv(JIT_CPU, 0));
     PL_runops = Perl_runops_jit;
 #endif

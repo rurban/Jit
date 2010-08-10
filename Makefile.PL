@@ -36,7 +36,7 @@ cc_main.dis: cc_main
 	objdump -d cc_main > cc_main.dis
 
 cc_main: cc_main.c
-	\$(PERL) -S cc_harness cc_main.c -fno-stack-protector -g3 -Os -o cc_main -save-temps -fverbose-asm
+	\$(PERL) -S cc_harness cc_main.c -fno-stack-protector -g3 -O2 -o cc_main -save-temps -fverbose-asm
 "
   } else {
     "asm : cc_main_nt.dis
@@ -45,7 +45,7 @@ cc_main_nt.dis: cc_main_nt
 	objdump -d cc_main_nt > cc_main_nt.dis
 
 cc_main_nt: cc_main_nt.c
-	\$(PERL) -S cc_harness cc_main_nt.c -fno-stack-protector -g3 -Os -o cc_main_nt -save-temps -fverbose-asm
+	\$(PERL) -S cc_harness cc_main_nt.c -fno-stack-protector -g3 -O2 -o cc_main_nt -save-temps -fverbose-asm
 "
   }
 }

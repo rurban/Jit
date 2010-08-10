@@ -5,6 +5,7 @@ in linear linked-list "exec" order, so that the CPU can prefetch the
 next instructions, and it inlines some simple ops.
 
 IT DOES NOT WORK YET!
+It does only work yet for non-threaded simple functions! No subs
 
 Faster jitted execution path without runops loop, 
 selected with -MJit or (later) with perl -j.

@@ -14,7 +14,7 @@ static OP * pp_main();
 static OP * pp_main() 
 {
     dVAR;
-    register OP *op = PL_op;
+    /*register OP *op = PL_op;*/
     PL_op = pp_enter();
     PL_op = pp_nextstate();
     PERL_ASYNC_CHECK;

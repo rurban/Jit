@@ -1,5 +1,5 @@
 /*
-       x86 thr: my_perl in ebx, my_perl->Iop in eax (ebx+4)
+       x86 thr: my_perl in ebx, my_perl->Iop in eax and ebx+4
 prolog: my_perl passed on stack, but force 16-alignment for stack. core2/opteron just loves that
 	8d 4c 24 04          	lea    0x4(%esp),%ecx
 	83 e4 f0             	and    $0xfffffff0,%esp
@@ -41,18 +41,15 @@ epilog after final Perl_despatch_signals
 	c3                   	ret
 */
 
-/* my_perl already on stack, but force 16-alignment for stack  */
+/* my_perl already on stack, but force 16-alignment for stack (sse only) */
 T_CHARARR x86thr_prolog[] = {
-    0x8d,0x4c,0x24,0x04,/* lea    0x4(%esp),%ecx  my_perl->Iop at 4 */
-    0x83,0xe4,0xf0,	/* and    $0xfffffff0,%esp 	*/
-    0xff,0x71,0xfc,	/* pushl  -0x4(%ecx) 	  my_perl*/
     0x55,		/* push   %ebp 		  	*/
     0x89,0xe5,		/* mov    %esp,%ebp 		*/
     0x53,               /* push   %ebx */
-    0x51,               /* push   %ecx */
+    /*0x51,*/           /* push   %ecx */
     0x89,0xc3           /* mov    %eax,%ebx */
 };
-/* call near not valid */
+/* call near */
 T_CHARARR x86thr_call[]  = {
     0x89,0x1c,0x24,	/* mov    %ebx,(%esp) */
     0xE8		/* call near 0xoffset */
