@@ -22,19 +22,41 @@ epilog:
 */
 
 /* stack is already aligned */
-T_CHARARR x86_prolog[] = {
-    0x55,		/* push %ebp; 		- save frame pointer*/
-    0x89,0xe5,		/* mov  %esp, %ebp; 	- set new frame pointer */
+/* Usage: sizeof(PROLOG) + PUSHc(PROLOG) */
+
+static unsigned x86_prolog[] = {
+    push_ebp,		/* save frame pointer*/
+    mov_ebp_esp,	/* set new frame pointer */
+    push_ebx,		/* &PL_op */
+    push_ecx,	
+    sub_x_esp(8),	/* room for 2 locals: $PL_sig_pending and op */
+    mov_mem_rebx, 4byte, /* &PL_op */
+    mov_mem_4ebp, 4byte  /* &PL_sig_pending */
 };
-T_CHARARR x86_prolog_with_dispatch[] = {
-    0x55,		/* push %ebp; */
-    0x89,0xe5,		/* mov  %esp, %ebp; */
-    0x51,     		/* push %ecx */
-};
+
+void push_prolog(void) {
+    PUSHc(_CA(push_ebp,
+              mov_ebp_esp,
+              push_ebx,
+              push_ecx,
+              sub_x_esp(8),
+    mov_mem_rebx)); PUSHmov(&PL_op);
+    PUSHc(mov_mem_4ebp); PUSHmov(&PL_sig_pending);
+}
+
+T_CHARARR x86_epilog[] = {
+    add_x_esp(8),
+    pop_ecx,
+    pop_ebx,
+    leave,		/* restore esp */
+    ret
+}
+
 T_CHARARR x86_call[]  = {0xe8};      	/* call near offset $PL_op->op_ppaddr */
 T_CHARARR x86_jmp[]   = {0xff,0x25}; 	/* jmp *$PL_op->op_ppaddr */
-T_CHARARR x86_save_plop[]  = {0xa3};    /* mov %eax,$PL_op */
-T_CHARARR x86_nop[]        = {0x90};    /* nop */
+T_CHARARR x86_save_plop[]  = {
+    mov_eax_8ebp			/* &PL_op in -8(%ebp) */
+};
 T_CHARARR x86_dispatch_getsig[] = {
     0x8b,0x0d		/* mov $PL_sig_pending,%ecx */
 }; /* &PL_sig_pending abs */
@@ -44,25 +66,11 @@ T_CHARARR x86_dispatch[] = {
     0xe8};      /* call   Perl_despatch_signals */
 /* &Perl_despatch_signals relative */
 T_CHARARR x86_dispatch_post[] = {}; /* fails with msvc */
-T_CHARARR x86_epilog[] = {
-    /*0x59,*/     	/* pop    %ecx */
-    0xc9,               /* leave 	- restore frame pointer */
-    0xc3};              /* ret */
-T_CHARARR x86_epilog_with_dispatch[] = {
-    0x59,     		/* pop    %ecx */
-    0xc9,               /* leave */
-    0xc3};              /* ret */
 
-#if (PERL_VERSION > 6) && (PERL_VERSION < 13)
-# define PROLOG 	x86_prolog_with_dispatch
-# define EPILOG         x86_epilog_with_dispatch
-#else
 # define PROLOG 	x86_prolog
 # define EPILOG         x86_epilog
-#endif
 # define CALL	 	x86_call
 # define JMP	 	x86_jmp
-# define NOP 	        x86_nop
 # define SAVE_PLOP	x86_save_plop
 # define DISPATCH_GETSIG x86_dispatch_getsig
 # define DISPATCH       x86_dispatch

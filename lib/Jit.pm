@@ -21,7 +21,7 @@ Jit the perl5 runops loop in proper execution order
 
 =head DESCRIPTION
 
-It does only work yet for non-threaded simple functions! No subs
+It does only work yet for non-threaded simple functions! No subs, no branches.
 
 This perl5 jitter is super-simple. The compiled optree is a linked
 list in memory in non-execution order, wide-spread jumps. Additionally

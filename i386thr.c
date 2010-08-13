@@ -85,7 +85,6 @@ T_CHARARR x86thr_epilog[] = {
 # define PROLOG 	x86thr_prolog
 # define CALL	 	x86thr_call
 # define JMP	 	x86thr_call
-# define NOP 	        x86_nop
 # define SAVE_PLOP	x86thr_save_plop
 # define DISPATCH_GETSIG x86thr_dispatch_getsig
 # define DISPATCH       x86thr_dispatch

@@ -45,7 +45,6 @@ T_CHARARR amd64thr_jmp[]   = {0xff,0x25}; /* jmp *$PL_op->op_ppaddr */
 T_CHARARR amd64thr_save_plop[]  = {
   0x48,0x89,0x05  /* mov %rax,0x5d14ec(%rip) #save new PL_op */
 };      
-T_CHARARR amd64thr_nop[]        = {0x90};      /* pad */
 T_CHARARR amd64thr_nop2[]       = {0x90,0x90};      /* jmp pad */
 T_CHARARR amd64thr_dispatch_getsig[] = {0x8b,0x0d};
 /*
@@ -64,7 +63,6 @@ T_CHARARR amd64thr_epilog[] = {0x89,0xec,          /* movl    %ebp,%esp */
 # define PROLOG 	amd64thr_prolog
 # define CALL	 	amd64thr_call
 # define JMP	 	amd64thr_jmp
-# define NOP 	        amd64thr_nop
 # define SAVE_PLOP	amd64thr_save_plop
 # define DISPATCH_GETSIG amd64thr_dispatch_getsig
 # define DISPATCH       amd64thr_dispatch
