@@ -45,7 +45,7 @@ T_CHARARR amd64_prolog[] = {
   push_rbx,
   mov_mem_rebx(0)
 };
-void push_prolog(void) {
+unsigned char *push_prolog(unsigned char *code) {
     unsigned char prolog[] = {
         push_rbp,
         mov_rsp_rbp,
@@ -55,6 +55,7 @@ void push_prolog(void) {
         mov_mem_4ebp(&PL_op) 
     };
     PUSHc(prolog);
+    return code;
 }
 T_CHARARR amd64_epilog[] = {
   pop_rbx,
@@ -78,12 +79,13 @@ T_CHARARR maybranch_plop[] = {
   mov_mem_rebx(0),
   mov_eax_8ebp
 };
-void push_maybranch_plop(void) {
+unsigned char *push_maybranch_plop(unsigned char *code) {
   unsigned char maybranch_plop[] = {
     mov_mem_rebx(&PL_op),
     mov_eax_8ebp
   };
   PUSHc(maybranch_plop);
+  return code;
 }
 
 # define PROLOG 	amd64_prolog

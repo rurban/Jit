@@ -37,7 +37,7 @@ T_CHARARR x86_prolog[] = {
     mov_mem_4ebp(0)     /* &PL_sig_pending to -4(%ebp) */
 };
 
-void push_prolog(void) {
+unsigned char * push_prolog(unsigned char *code) {
     unsigned char prolog[] = {
         push_ebp,
         mov_ebp_esp,
@@ -47,6 +47,7 @@ void push_prolog(void) {
         mov_mem_rebx(&PL_op),
         mov_mem_4ebp(&PL_sig_pending) };
     PUSHc(prolog);
+    return code;
 }
 
 T_CHARARR x86_epilog[] = {
@@ -73,8 +74,13 @@ T_CHARARR x86_dispatch[] = {
 T_CHARARR x86_dispatch_post[] = {}; /* fails with msvc */
 
 unsigned char *
-x86_maybranch_plop() {
-    
+x86_maybranch_plop(unsigned char *code) {
+  unsigned char maybranch_plop[] = {
+    mov_mem_rebx(&PL_op),
+    mov_eax_8ebp
+  };
+  PUSHc(maybranch_plop);
+  return code;
 }
 
 

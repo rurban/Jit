@@ -35,7 +35,7 @@
 
 int dispatch_needed(OP* op);
 int maybranch(OP* op);
-void push_prolog(void);
+unsigned char *push_prolog(unsigned char *code);
 
 /* When do we need PERL_ASYNC_CHECK?
  * Until 5.13.2  we had it after each and every op,
@@ -104,6 +104,18 @@ threaded, same logic as above, just:
 #define _CA(x)    	(unsigned char){ x }
 #define CALL_ABS(abs) 	call_abs(code,abs)
 /*(U32)((unsigned char*)abs-code-3)*/
+#define PUSHc(what) memcpy(code,what,sizeof(what)); code += sizeof(what)
+/* force 4 byte for U32, 64bit uses 8 byte for U32, but 4 byte for call near */
+#define PUSHcall(what) memcpy(code,&what,CALL_SIZE); code += CALL_SIZE
+#ifdef MOV_REL /* amd64 */
+# define PUSHmov(where) { \
+    U32 r = (unsigned char*)where - (code+4); \
+    memcpy(code,&r,MOV_SIZE); code += MOV_SIZE; \
+}
+#else
+# define PUSHmov(what) memcpy(code,what,MOV_SIZE); code += MOV_SIZE
+#endif
+
 
 #if (defined(__i386__) || defined(_M_IX86))
 #define JIT_CPU "i386"
@@ -178,7 +190,9 @@ T_CHARARR NOP[]      = {0x90};    /* nop */
 /* mov    $memabs,(%ebx) &Perl_Isig_pending_ptr in ebx */
 #define mov_mem_rebx(m)	0xbb,(((unsigned int)m)&0xff),(((unsigned int)m)&0xff00),\
                              (((unsigned int)m)&0xff0000),(((unsigned int)m)&0xff000000)
-
+/* &PL_sig_pending in -4(%ebp) */
+#define mov_mem_4ebp(m)	0xc7,0x45,0xfc,(((unsigned int)m)&0xff),(((unsigned int)m)&0xff00),\
+					(((unsigned int)m)&0xff0000),(((unsigned int)m)&0xff000000)
 /* EPILOG */
 #define add_x_esp(byte) 0x83,0xc4,byte	/* add    $0x4,%esp */
 #define pop_rbx 	0x5b
@@ -212,18 +226,6 @@ T_CHARARR NOP[]      = {0x90};    /* nop */
 
 #ifndef JIT_CPU
 #error "Only intel x86_32 and x86_64/amd64 supported so far"
-#endif
-
-#define PUSHc(what) memcpy(code,what,sizeof(what)); code += sizeof(what)
-/* force 4 byte for U32, 64bit uses 8 byte for U32, but 4 byte for call near */
-#define PUSHcall(what) memcpy(code,&what,CALL_SIZE); code += CALL_SIZE
-#ifdef MOV_REL /* amd64 */
-# define PUSHmov(where) { \
-    U32 r = (unsigned char*)where - (code+4); \
-    memcpy(code,&r,MOV_SIZE); code += MOV_SIZE; \
-}
-#else
-# define PUSHmov(what) memcpy(code,what,MOV_SIZE); code += MOV_SIZE
 #endif
 
 /**********************************************************************************/
@@ -355,7 +357,7 @@ jit_chain(
 	size += sizeof(maybranch_plop);
 	size += sizeof(CALL); size += CALL_SIZE;
       } else {
-	push_maybranch_plop();
+	code = push_maybranch_plop(code);
 	code = CALL_ABS(op->op_ppaddr);
       }
       if ((PL_opargs[op->op_type] & OA_CLASS_MASK) == OA_LOGOP) {
@@ -396,7 +398,7 @@ jit_chain(
     }
 #endif
     if (DISPATCH_NEEDED(op)) {
-      dispatch++;
+      /*dispatch++;*/
 #ifdef DEBUGGING
       if (!dryrun) {
 # ifdef USE_ITHREADS
@@ -497,7 +499,7 @@ Perl_runops_jit(pTHX)
     OP * root = PL_op;
     int size = 0;
     size += sizeof(PROLOG);
-    jit_chain(NULL, PL_op);
+    JIT_CHAIN(NULL, PL_op);
     size += sizeof(EPILOG);
     while ((size | 0xfffffff0) % 4) { size++; }
     PL_op = root;
@@ -534,8 +536,8 @@ Perl_runops_jit(pTHX)
 #endif
 
     /* pass 2: jit */
-    push_prolog();
-    size = jit_chain(code, PL_op);
+    code = push_prolog(code);
+    size = JIT_CHAIN(code, PL_op);
     code += size;
     PUSHc(EPILOG);
     while (((unsigned int)&code | 0xfffffff0) % 4) { *(code++) = NOP[0]; }
@@ -551,8 +553,8 @@ Perl_runops_jit(pTHX)
     system("as run-jit.s -o run-jit.o");
 # endif
 # if (PERL_VERSION > 6) && (PERL_VERSION < 13)
-    DEBUG_v( printf("#Perl_despatch_signals \t= 0x%x (%dx)\n",
-                    Perl_despatch_signals, dispatch) );
+    DEBUG_v( printf("#Perl_despatch_signals \t= 0x%x\n",
+                    Perl_despatch_signals) );
 #  if !defined(USE_ITHREADS)
     DEBUG_v( printf("#PL_sig_pending \t= 0x%x\n",&PL_sig_pending) );
 #  endif
