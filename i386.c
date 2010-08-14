@@ -29,7 +29,7 @@ epilog:
 
 T_CHARARR x86_prolog[] = {
     push_ebp,		/* save frame pointer*/
-    mov_ebp_esp,	/* set new frame pointer */
+    mov_esp_ebp,	/* set new frame pointer */
     push_ebx,		/* &PL_op  */
     push_ecx,		/* reserve */
     sub_x_esp(8),	/* room for 2 locals: &PL_sig_pending and op */
@@ -40,7 +40,7 @@ T_CHARARR x86_prolog[] = {
 unsigned char * push_prolog(unsigned char *code) {
     unsigned char prolog[] = {
         push_ebp,
-        mov_ebp_esp,
+        mov_esp_ebp,
         push_ebx,
         push_ecx,
         sub_x_esp(8),
@@ -56,7 +56,7 @@ T_CHARARR x86_epilog[] = {
     pop_ebx,
     leave,		/* restore esp */
     ret
-}
+};
 
 T_CHARARR x86_call[]  = {0xe8};      	/* call near offset $PL_op->op_ppaddr */
 T_CHARARR x86_jmp[]   = {0xff,0x25}; 	/* jmp *$PL_op->op_ppaddr */
@@ -73,12 +73,15 @@ T_CHARARR x86_dispatch[] = {
 /* &Perl_despatch_signals relative */
 T_CHARARR x86_dispatch_post[] = {}; /* fails with msvc */
 
+T_CHARARR maybranch_plop[] = {
+    mov_mem_rebx(0),
+    mov_eax_8ebp
+};
 unsigned char *
-x86_maybranch_plop(unsigned char *code) {
+push_maybranch_plop(unsigned char *code) {
   unsigned char maybranch_plop[] = {
     mov_mem_rebx(&PL_op),
-    mov_eax_8ebp
-  };
+    mov_eax_8ebp};
   PUSHc(maybranch_plop);
   return code;
 }
@@ -92,7 +95,7 @@ x86_maybranch_plop(unsigned char *code) {
 # define DISPATCH_GETSIG x86_dispatch_getsig
 # define DISPATCH       x86_dispatch
 # define DISPATCH_POST  x86_dispatch_post
-# define MAYBRANCH_PLOP 
+# define MAYBRANCH_PLOP maybranch_plop 
 # define MAYBRANCH_ARGS
 # define MAYBRANCH_POST
 

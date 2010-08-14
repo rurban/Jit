@@ -344,11 +344,11 @@ call_abs (unsigned char *code, void *addr) {
 
 int
 jit_chain(
-	  register OP* op,
+	  OP* op,
 	  unsigned char *code, 
-	  unsigned char *root, 
+	  unsigned char *root
 #ifdef DEBUGGING
-	  FILE *fh, FILE *stabs
+	  , FILE *fh, FILE *stabs
 #endif
 	  )
 {
@@ -417,9 +417,10 @@ jit_chain(
       size += MOV_SIZE;
     } else {
 #ifdef MOV_REL
-      PUSHmov(&PL_op);
+      PUSHmov(&op);
 #else
-      PUSHmov(&PL_op_ptr);
+      OP *op_ptr = &op;
+      PUSHmov(&op_ptr);
 #endif
     }
 #endif
