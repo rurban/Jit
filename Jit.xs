@@ -51,8 +51,10 @@ void push_prolog(void);
 #endif
 
 #ifdef DEBUGGING
+# define JIT_CHAIN(code, op) jit_chain(fh, stabs, code, op) 
 # define DEB_PRINT_LOC(loc) printf(loc" \t= 0x%x\n", loc)
 #else
+# define JIT_CHAIN(code, op) jit_chain(code, op) 
 # define DEB_PRINT_LOC(loc)
 #endif
 
@@ -100,8 +102,8 @@ threaded, same logic as above, just:
 #endif
 
 #define _CA(x)    	(unsigned char){ x }
-#define CALL_ABS(abs) 	(U32)((unsigned char*)abs-code-3)
-#define 4byte		_CA(0,0,0,0)
+#define CALL_ABS(abs) 	call_abs(code,abs)
+/*(U32)((unsigned char*)abs-code-3)*/
 
 #if (defined(__i386__) || defined(_M_IX86))
 #define JIT_CPU "i386"
@@ -111,6 +113,7 @@ threaded, same logic as above, just:
 
 T_CHARARR NOP[]      = {0x90};    /* nop */
 
+/* PROLOG and EPILOG are untyped - no _CA */
 /* PROLOG */
 #define push_ebp    	0x55
 #define mov_ebp_esp 	0x89,0xe5
@@ -118,10 +121,11 @@ T_CHARARR NOP[]      = {0x90};    /* nop */
 #define push_ecx	0x51
 #define sub_x_esp(byte) 0x83,0x3c,byte
 /* mov    $memabs,(%ebx) &PL_op in ebx */
-#define mov_mem_rebx 	0xc7,0x03
+#define mov_mem_rebx(m)	0xc7,0x03,(((unsigned int)m)&0xff),(((unsigned int)m)&0xff00),\
+        		           (((unsigned int)m)&0xff0000),(((unsigned int)m)&0xff000000)
 /* &PL_sig_pending in -4(%ebp) */
-#define mov_mem_4ebp 	0xc7,0x45,0xfc /* + 4 memabs */
-
+#define mov_mem_4ebp(m)	0xc7,0x45,0xfc,(((unsigned int)m)&0xff),(((unsigned int)m)&0xff00),\
+					(((unsigned int)m)&0xff0000),(((unsigned int)m)&0xff000000)
 
 /* EPILOG */
 #define add_x_esp(byte) 0x83,0xc4,byte	/* add    $0x4,%esp */
@@ -130,21 +134,22 @@ T_CHARARR NOP[]      = {0x90};    /* nop */
 #define leave 		0xc9
 #define ret 		0xc3
 
+/* maybranch: */
 /* &op in -8(%ebp) */
-#define mov_eax_8ebp 	_CA(0x89,0x45,0xf8)
+#define mov_eax_8ebp 	0x89,0x45,0xf8
 
-#define call 		_CA(0xe8)	    /* + 4 rel */
-#define ljmp(abs) 	_CA(0xff,0x25)	    /* + 4 memabs */
-#define mov_eax_mem 	_CA(0xa3)	    /* + 4 memabs */
+#define call 		0xe8	    /* + 4 rel */
+#define ljmp(abs) 	0xff,0x25   /* + 4 memabs */
+#define mov_eax_mem 	0xa3	    /* + 4 memabs */
 /* mov    %rax,(%rbx) &PL_op in ebx */
-#define mov_eax_rebx    _CA(0x89,0x03)
+#define mov_eax_rebx    _CA((0x89,0x03))
 
-#define mov_4ebp_edx    _CA(0x8b,0x55,0xfc
-#define mov_redx_eax    _CA(0x82,0x02
-#define test_eax_eax    _CA(0x85,0xc0
-#define je(byte)        _CA(0x74,byte)
+#define mov_4ebp_edx    _CA((0x8b,0x55,0xfc))
+#define mov_redx_eax    _CA((0x82,0x02))
+#define test_eax_eax    _CA((0x85,0xc0))
+#define je(byte)        _CA((0x74,byte))
 /* skip call	_Perl_despatch_signals */
-#define je_5            _CA(0x74,0x05)
+#define je_5            _CA((0x74,0x05))
 
 #ifdef USE_ITHREADS
 # include "i386thr.c"
@@ -161,6 +166,42 @@ T_CHARARR NOP[]      = {0x90};    /* nop */
 #define MOV_REL
 
 T_CHARARR NOP[]      = {0x90};    /* nop */
+
+/* PROLOG and EPILOG are untyped - no _CA */
+/* PROLOG */
+#define push_rbp    	0x55
+#define mov_rsp_rbp 	0x48,0x89,0xe5
+#define push_r12 	0x41,0x54
+#define push_rbx 	0x53
+#define push_rcx	0x51
+#define sub_x_rsp(byte) 0x83,0x3c,byte
+/* mov    $memabs,(%ebx) &Perl_Isig_pending_ptr in ebx */
+#define mov_mem_rebx(m)	0xbb,(((unsigned int)m)&0xff),(((unsigned int)m)&0xff00),\
+                             (((unsigned int)m)&0xff0000),(((unsigned int)m)&0xff000000)
+
+/* EPILOG */
+#define add_x_esp(byte) 0x83,0xc4,byte	/* add    $0x4,%esp */
+#define pop_rbx 	0x5b
+#define pop_r12    	0x41,0x5c
+#define leave 		0xc9
+#define ret 		0xc3
+
+/* maybranch: */
+/* &op in -8(%ebp) */
+#define mov_eax_8ebp 	0x89,0x45,0xf8
+
+#define call 		0xe8	    /* + 4 rel */
+#define ljmp(abs) 	0xff,0x25   /* + 4 memabs */
+#define mov_eax_mem 	0xa3	    /* + 4 memabs */
+/* mov    %rax,(%rbx) &PL_op in ebx */
+#define mov_eax_rebx    _CA((0x89,0x03))
+
+#define mov_4ebp_edx    _CA((0x8b,0x55,0xfc))
+#define mov_redx_eax    _CA((0x82,0x02))
+#define test_eax_eax    _CA((0x85,0xc0))
+#define je(byte)        _CA((0x74,byte))
+/* skip call	_Perl_despatch_signals */
+#define je_5            _CA((0x74,0x05))
 
 #ifdef USE_ITHREADS
 # include "amd64thr.c"
@@ -246,6 +287,22 @@ maybranch(OP* op) {
     }
 }
 
+int
+returnother(OP* op) {
+    switch (op->op_type) { 	/* sync this list with B::CC */
+    case OP_AND:
+    case OP_OR:
+    case OP_DOR:
+    case OP_COND_EXPR:
+    case OP_ANDASSIGN:
+    case OP_ORASSIGN:
+    case OP_DORASSIGN:
+        return 1;
+    default:
+        return 0;
+    }
+}
+
 int call_abs (int code, void *addr) {
     /* intel specific: */
     register int rel = (unsigned char*)addr - code - 3;
@@ -263,18 +320,126 @@ int call_abs (int code, void *addr) {
     return code;
 }
 
-unsigned char *
-jit_chain(FILE *fh, unsigned char * code, OP* op, int dryrun) {
-    fprintf(fh, "jit_chain op 0x%x;\n", op);
-    do {
+int
+jit_chain(
 #ifdef DEBUGGING
-        char *opname = PL_op_name[op->op_type];
-        DEBUG_v( printf("#pp_%s \t= 0x%x\n",opname,op->op_ppaddr));
+	  FILE *fh, FILE *stabs, 
 #endif
-	if (op->op_type == OP_NULL) continue;
-        code += 4;
-    } while (op = op->op_next);
-    return code;
+	  unsigned char *code, OP* op) 
+{
+  int dryrun = *code > 0;
+  unsigned char *code_sav = code;
+#ifdef DEBUGGING
+  static int line = 0;
+  char *opname;
+  if (!dryrun)
+    fprintf(fh, "/* block jit_chain op 0x%x; */\n", op);
+#endif
+  int size = 0;
+  do {
+#ifdef DEBUGGING
+    if (!dryrun) {
+      opname = PL_op_name[op->op_type];
+      DEBUG_v( printf("#pp_%s \t= 0x%x\n", opname, op->op_ppaddr));
+    }
+#endif
+    if (op->op_type == OP_NULL) continue;
+# if defined(DEBUGGING) && defined(__GNUC__)
+    if (!dryrun) {
+      fprintf(stabs, ".stabn 68,0,%d,%d /* call pp_%s */\n",
+	      ++line, code-code_sav, opname);
+    }
+# endif
+    if (maybranch(op)) {
+      if (dryrun) {
+	size += sizeof(maybranch_plop);
+	size += sizeof(CALL); size += CALL_SIZE;
+      } else {
+	push_maybranch_plop();
+	code = CALL_ABS(op->op_ppaddr);
+      }
+      if ((PL_opargs[op->op_type] & OA_CLASS_MASK) == OA_LOGOP) {
+	int label = JIT_CHAIN(code, cLOGOPx(op)->op_other);
+	size += label-(int)code;
+      }
+    }
+
+    if (!dryrun) {
+#ifdef DEBUGGING
+# ifdef USE_ITHREADS
+      fprintf(fh, "my_perl->Iop = Perl_pp_%s(my_perl);\n", opname);
+# else
+      fprintf(fh, "PL_op = Perl_pp_%s();\n", opname);
+# endif
+#endif
+    }
+    if (dryrun) {
+      size += sizeof(CALL); size += CALL_SIZE;
+    } else {
+      code = CALL_ABS(PL_op->op_ppaddr);
+#if defined(DEBUGGING) && defined(__GNUC__)
+      fprintf(stabs, ".stabn 68,0,%d,%d /* PL_op = eax */\n",
+	      ++line, code-code_sav);
+#endif
+    }
+
+    if (dryrun) {
+      size += sizeof(SAVE_PLOP);
+#ifndef USE_ITHREADS
+      size += MOV_SIZE;
+    } else {
+# ifndef MOV_REL
+      PUSHmov(&PL_op_ptr);
+# else
+      PUSHmov(&op);
+# endif
+    }
+#endif
+    if (DISPATCH_NEEDED(op)) {
+      dispatch++;
+#ifdef DEBUGGING
+      if (!dryrun) {
+# ifdef USE_ITHREADS
+	fprintf(fh, "if (my_perl->Isig_pending)\n  Perl_despatch_signals(my_perl);\n");
+# else
+	fprintf(fh, "if (PL_sig_pending)\n  Perl_despatch_signals();\n");
+# endif
+# ifdef __GNUC__
+	fprintf(stabs, ".stabn 68,0,%d,%d /* if (PL_sig_pending) */\n",
+		++line, code-code_sav);
+# endif
+      }
+#endif
+#if !defined(USE_ITHREADS) && PERL_VERSION > 6
+      if (dryrun) {
+	size += sizeof(DISPATCH_GETSIG);
+	size += MOV_SIZE;
+      } else {
+	PUSHc(DISPATCH_GETSIG);
+	PUSHmov(&PL_sig_pending);
+# if defined(DEBUGGING) && defined(__GNUC__)
+	fprintf(stabs, ".stabn 68,0,%d,%d /* Perl_despatch_signals() */\n",
+		++line, code-code_sav);
+# endif
+      }
+#endif
+      if (dryrun) {
+	size += sizeof(DISPATCH);
+	size += MOV_SIZE;
+      } else {
+	PUSHc(DISPATCH);
+	PUSHmov(&Perl_despatch_signals);
+      }
+#ifdef USE_ITHREADS
+      if (dryrun) {
+	size += sizeof(DISPATCH_POST);
+      } else {
+	PUSHc(DISPATCH_POST);
+      }
+#endif
+    }
+  } while (op = op->op_next);
+  return dryrun ? size : code;
 }
 
 /*
@@ -296,8 +461,8 @@ Perl_runops_jit(pTHX)
     dVAR;
 #endif
 #ifdef DEBUGGING
-    static int global_loops = 0;
     static int line = 0;
+    static int global_loops = 0;
     register int i;
     FILE *fh;
     char *opname;
@@ -332,42 +497,7 @@ Perl_runops_jit(pTHX)
     OP * root = PL_op;
     int size = 0;
     size += sizeof(PROLOG);
-    do {
-#ifdef DEBUGGING
-        opname = PL_op_name[PL_op->op_type];
-        DEBUG_v( printf("#pp_%s \t= 0x%x\n",opname,PL_op->op_ppaddr));
-#endif
-	if (PL_op->op_type == OP_NULL) continue;
-
-        if (maybranch(PL_op)) {
-            size += sizeof(mov_mem_rebx)+4;
-            size += sizeof(mov_eax_8ebp);
-            size += sizeof(CALL); size += CALL_SIZE;
-            /*code = call_rel(code, PL_op->op_ppaddr);*/
-            if ((PL_opargs[PL_op->op_type] & OA_CLASS_MASK) == OA_LOGOP) {
-                unsigned char label = jit_chain(fh, code, cLOGOP->op_other, 0);
-                size += (int)(label-code);
-            }
-        }
-
-	size += sizeof(CALL); size += CALL_SIZE;
-	size += sizeof(SAVE_PLOP);
-#ifndef USE_ITHREADS
-	size += MOV_SIZE;
-#endif
-	if (DISPATCH_NEEDED(PL_op)) {
-            dispatch++;
-#ifndef USE_ITHREADS
-	    size += sizeof(DISPATCH_GETSIG);
-	    size += MOV_SIZE;
-#endif
-	    size += sizeof(DISPATCH);
-	    size += MOV_SIZE;
-#ifdef USE_ITHREADS
-	    size += sizeof(DISPATCH_POST);
-#endif
-	}
-    } while (PL_op = PL_op->op_next);
+    jit_chain(NULL, PL_op);
     size += sizeof(EPILOG);
     while ((size | 0xfffffff0) % 4) { size++; }
     PL_op = root;
@@ -405,75 +535,8 @@ Perl_runops_jit(pTHX)
 
     /* pass 2: jit */
     push_prolog();
-    do {
-	if (PL_op->op_type == OP_NULL) continue;
-	/* relative offset to addr */
-#ifdef DEBUGGING
-        opname = PL_op_name[PL_op->op_type];
-# if defined(DEBUGGING) && defined(__GNUC__)
-        fprintf(stabs, ".stabn 68,0,%d,%d /* call pp_%s */\n",
-                ++line, code-code_sav, opname);
-# endif
-
-        if (maybranch(PL_op)) {
-            PUSHc(mov_mem_rebx); PUSHc(&PL_op); /* movl _PL_op, %eax */
-            PUSHc(mov_eax_8ebp);		/* movl	%eax, -8(%ebp) */
-            code = call_abs(PL_op->op_ppaddr);
-            /* PUSHc(call); PUSHc(call_abs(PL_op->op_ppaddr)); */
-            if ((PL_opargs[PL_op->op_type] & OA_CLASS_MASK) == OA_LOGOP) {
-                unsigned char label = jit_chain(fh, code, cLOGOP->op_other, 1);
-                size += (int)(label-code);
-            }
-        }
-
-# ifdef USE_ITHREADS
-        fprintf(fh, "my_perl->Iop = Perl_pp_%s(my_perl);\n", opname);
-# else
-        fprintf(fh, "PL_op = Perl_pp_%s();\n", opname);
-# endif
-#endif
-        code = call_abs(PL_op->op_ppaddr);
-#if defined(DEBUGGING) && defined(__GNUC__)
-        fprintf(stabs, ".stabn 68,0,%d,%d /* PL_op = eax */\n",
-                ++line, code-code_sav);
-#endif
-
-	PUSHc(SAVE_PLOP);
-#ifndef USE_ITHREADS		/* threaded we know the target location: %ebx+4 */
-# ifndef MOV_REL
-        PUSHmov(&PL_op_ptr);
-# else
-        PUSHmov(&PL_op);
-# endif
-#endif
-
-	if (DISPATCH_NEEDED(PL_op)) {
-#ifdef DEBUGGING
-# ifdef USE_ITHREADS
-            fprintf(fh, "if (my_perl->Isig_pending)\n  Perl_despatch_signals(my_perl);\n");
-# else
-            fprintf(fh, "if (PL_sig_pending)\n  Perl_despatch_signals();\n");
-# endif
-# if defined(DEBUGGING) && defined(__GNUC__)
-            fprintf(stabs, ".stabn 68,0,%d,%d /* if (PL_sig_pending) */\n",
-                    ++line, code-code_sav);
-# endif
-#endif
-#if !defined(USE_ITHREADS) && PERL_VERSION > 6
-	    PUSHc(DISPATCH_GETSIG);
-	    PUSHmov(&PL_sig_pending);
-#endif
-#if defined(DEBUGGING) && defined(__GNUC__)
-            fprintf(stabs, ".stabn 68,0,%d,%d /* Perl_despatch_signals() */\n",
-                    ++line, code-code_sav);
-#endif
-	    PUSHc(DISPATCH);
-	    PUSHmov(&Perl_despatch_signals);
-#ifdef USE_ITHREADS
-	    PUSHc(DISPATCH_POST);
-#endif
-	}
-    } while (PL_op = PL_op->op_next);
+    size = jit_chain(code, PL_op);
+    code += size;
     PUSHc(EPILOG);
     while (((unsigned int)&code | 0xfffffff0) % 4) { *(code++) = NOP[0]; }
 

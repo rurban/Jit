@@ -41,7 +41,35 @@ epilog after final Perl_despatch_signals
 	c3                   	ret
 */
 
-/* my_perl already on stack, but force 16-alignment for stack (sse only) */
+/* my_perl already on stack, Iop at 4(%ebx),  */
+static unsigned x86thr_prolog[] = {
+    push_ebp,		/* save frame pointer*/
+    mov_ebp_esp,	/* set new frame pointer */
+    push_ebx,		/* &PL_op */
+    push_ecx,	
+    sub_x_esp(8),	/* room for 2 locals: $PL_sig_pending and op */
+    mov_mem_rebx, 4byte, /* &PL_op */
+    mov_mem_4ebp, 4byte  /* &PL_sig_pending */
+};
+
+void push_prolog(void) {
+    PUSHc(_CA(push_ebp,
+              mov_ebp_esp,
+              push_ebx,
+              push_ecx,
+              sub_x_esp(8),
+              mov_mem_rebx(&PL_op),
+              mov_mem_4ebp(&PL_sig_pending)));
+}
+
+T_CHARARR x86thr_epilog[] = {
+    add_x_esp(8),
+    pop_ecx,
+    pop_ebx,
+    leave,		/* restore esp */
+    ret
+}
+
 T_CHARARR x86thr_prolog[] = {
     0x55,		/* push   %ebp 		  	*/
     0x89,0xe5,		/* mov    %esp,%ebp 		*/

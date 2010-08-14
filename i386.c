@@ -15,6 +15,9 @@ dispatch:
 	85 c9                	test   %ecx,%ecx
 	74 06                	je     +6
 	e8 xx xx xx xx          call   *Perl_despatch_signals #relative
+
+
+
 epilog:
 	b8 00 00 00 00       	mov    $0x0,%eax 	# clean PL_op
 	5d               	pop    %ebp
@@ -24,24 +27,26 @@ epilog:
 /* stack is already aligned */
 /* Usage: sizeof(PROLOG) + PUSHc(PROLOG) */
 
-static unsigned x86_prolog[] = {
+T_CHARARR x86_prolog[] = {
     push_ebp,		/* save frame pointer*/
     mov_ebp_esp,	/* set new frame pointer */
-    push_ebx,		/* &PL_op */
-    push_ecx,	
-    sub_x_esp(8),	/* room for 2 locals: $PL_sig_pending and op */
-    mov_mem_rebx, 4byte, /* &PL_op */
-    mov_mem_4ebp, 4byte  /* &PL_sig_pending */
+    push_ebx,		/* &PL_op  */
+    push_ecx,		/* reserve */
+    sub_x_esp(8),	/* room for 2 locals: &PL_sig_pending and op */
+    mov_mem_rebx(0),    /* &PL_op to ebx */
+    mov_mem_4ebp(0)     /* &PL_sig_pending to -4(%ebp) */
 };
 
 void push_prolog(void) {
-    PUSHc(_CA(push_ebp,
-              mov_ebp_esp,
-              push_ebx,
-              push_ecx,
-              sub_x_esp(8),
-    mov_mem_rebx)); PUSHmov(&PL_op);
-    PUSHc(mov_mem_4ebp); PUSHmov(&PL_sig_pending);
+    unsigned char prolog[] = {
+        push_ebp,
+        mov_ebp_esp,
+        push_ebx,
+        push_ecx,
+        sub_x_esp(8),
+        mov_mem_rebx(&PL_op),
+        mov_mem_4ebp(&PL_sig_pending) };
+    PUSHc(prolog);
 }
 
 T_CHARARR x86_epilog[] = {
@@ -67,6 +72,12 @@ T_CHARARR x86_dispatch[] = {
 /* &Perl_despatch_signals relative */
 T_CHARARR x86_dispatch_post[] = {}; /* fails with msvc */
 
+unsigned char *
+x86_maybranch_plop() {
+    
+}
+
+
 # define PROLOG 	x86_prolog
 # define EPILOG         x86_epilog
 # define CALL	 	x86_call
@@ -75,4 +86,8 @@ T_CHARARR x86_dispatch_post[] = {}; /* fails with msvc */
 # define DISPATCH_GETSIG x86_dispatch_getsig
 # define DISPATCH       x86_dispatch
 # define DISPATCH_POST  x86_dispatch_post
+# define MAYBRANCH_PLOP 
+# define MAYBRANCH_ARGS
+# define MAYBRANCH_POST
+
 

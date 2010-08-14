@@ -39,13 +39,28 @@ L2:
 */
 
 T_CHARARR amd64_prolog[] = {
-  0x55,			/* push   %rbp */
-  0x48,0x89,0xe5,	/* mov    %rsp, %rbp */
-#if (PERL_VERSION > 6) && (PERL_VERSION < 13)
-  0x53,			/* push   %rbx */
-  0x31,0xdb,            /* xor    %ebx,%ebx */
-#endif
+  push_rbp,
+  mov_rsp_rbp,
+  push_r12, /* for register OP* op */
+  push_rbx,
+  mov_mem_rebx(0)
 };
+void push_prolog(void) {
+    unsigned char prolog[] = {
+        push_rbp,
+        mov_rsp_rbp,
+        push_r12,
+        push_rbx,
+        mov_mem_rebx(&PL_sig_pending),
+        mov_mem_4ebp(&PL_op) 
+    };
+    PUSHc(prolog);
+}
+T_CHARARR amd64_epilog[] = {
+  pop_rbx,
+  leave,
+  ret};
+
 T_CHARARR amd64_call[]  = {0xe8};      /* callq PL_op->op_ppaddr@PLT */
 T_CHARARR amd64_jmp[]   = {0xff,0x25}; /* jmp *$PL_op->op_ppaddr */
 T_CHARARR amd64_save_plop[]  = {
@@ -58,12 +73,18 @@ T_CHARARR amd64_dispatch_getsig[] = {0x8b,0x0d};
 T_CHARARR amd64_dispatch[] = {0x85,0xc9,0x74,0x06,
 			      0xFF,0x25};
 T_CHARARR amd64_dispatch_post[] = {}; /* fails with msvc */
-T_CHARARR amd64_epilog[] = {
-#if (PERL_VERSION > 6) && (PERL_VERSION < 13)
-  0x5b,			/* pop   %rbx */
-#endif
-  0xc9,   		/* leaveq */
-  0xc3};   		/* ret */
+
+T_CHARARR maybranch_plop[] = {
+  mov_mem_rebx(0),
+  mov_eax_8ebp
+};
+void push_maybranch_plop(void) {
+  unsigned char maybranch_plop[] = {
+    mov_mem_rebx(&PL_op),
+    mov_eax_8ebp
+  };
+  PUSHc(maybranch_plop);
+}
 
 # define PROLOG 	amd64_prolog
 # define CALL	 	amd64_call
@@ -74,3 +95,4 @@ T_CHARARR amd64_epilog[] = {
 # define DISPATCH       amd64_dispatch
 # define DISPATCH_POST  amd64_dispatch_post
 # define EPILOG         amd64_epilog
+# define MAYBRANCH_PLOP maybranch_plop

@@ -5,8 +5,12 @@ MANIFEST
 Makefile.PL
 README
 disfunc
+3-jit.c
+3-jit-hand.S
 cc_main.c
 cc_main_nt.c
 Jit-nt.xs.README
 lib/Jit.pm
-test.pl
+t/1.t
+t/2.t
+t/3.t
