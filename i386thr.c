@@ -13,8 +13,6 @@ call_far:
   	89 1c 24             	mov    %ebx,(%esp)    ; push my_perl
 	e8 xx xx xx xx		call   offset to $PL_op->op_ppaddr ; 0x5214a4c5<Perl_pp_enter>
 save_plop:
-        90                      nop
-        90                      nop
 	89 43 04             	mov    %eax,0x4(%ebx) ; save new PL_op into my_perl
 PERL_ASYNC_CHECK:
 	movl	%ebx, (%esi)	;891e
@@ -42,41 +40,26 @@ epilog after final Perl_despatch_signals
 */
 
 /* my_perl already on stack, Iop at 4(%ebx),  */
-static unsigned x86thr_prolog[] = {
-    push_ebp,		/* save frame pointer*/
-    mov_ebp_esp,	/* set new frame pointer */
-    push_ebx,		/* &PL_op */
-    push_ecx,	
-    sub_x_esp(8),	/* room for 2 locals: $PL_sig_pending and op */
-    mov_mem_rebx, 4byte, /* &PL_op */
-    mov_mem_4ebp, 4byte  /* &PL_sig_pending */
-};
-
+#define X86THR_PROLOG					\
+    	push_ebp,	/* save frame pointer*/ 	\
+	mov_esp_ebp,	/* set new frame pointer */ 	\
+	push_ebx,	/* &my_perl */			\
+	push_ecx,					\
+	sub_x_esp(4),	/* room for 1 local: op */ 	\
+	mov_eax_ebx
+static unsigned x86thr_prolog[] = { X86THR_PROLOG };
 void push_prolog(void) {
-    PUSHc(_CA(push_ebp,
-              mov_ebp_esp,
-              push_ebx,
-              push_ecx,
-              sub_x_esp(8),
-              mov_mem_rebx(&PL_op),
-              mov_mem_4ebp(&PL_sig_pending)));
+    PUSHc(_CA(X86THR_PROLOG));
 }
 
 T_CHARARR x86thr_epilog[] = {
-    add_x_esp(8),
+    add_x_esp(4),
     pop_ecx,
     pop_ebx,
     leave,		/* restore esp */
     ret
 }
 
-T_CHARARR x86thr_prolog[] = {
-    0x55,		/* push   %ebp 		  	*/
-    0x89,0xe5,		/* mov    %esp,%ebp 		*/
-    0x53,               /* push   %ebx */
-    /*0x51,*/           /* push   %ecx */
-    0x89,0xc3           /* mov    %eax,%ebx */
-};
 /* call near */
 T_CHARARR x86thr_call[]  = {
     0x89,0x1c,0x24,	/* mov    %ebx,(%esp) */
@@ -101,13 +84,6 @@ T_CHARARR x86thr_dispatch_post[] = {
     0x83,0xc4,0x10,0x83,
     0xec,0x0c,0x31,0xdb,
     0x53,0x90
-};
-/* epilog after final Perl_despatch_signals */
-T_CHARARR x86thr_epilog[] = {
-    0x83,0xc4,0x10,0x8d,
-    0x65,0xf8,0x59,0x5b,
-    0x5d,0x8d,0x61,0xfc,
-    0xc3,0x90
 };
 
 # define PROLOG 	x86thr_prolog

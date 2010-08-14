@@ -5,10 +5,10 @@ PL_op in %rax, &PL_op in %rbx, &PL_sig_pending in %rcx
   55                   	push   %rbp
   48 89 e5             	mov    %rsp,%rbp
   53                    push   %rbx
-  5?                    push   %rcx
+  51                    push   %rcx
   31 c0			xor    %eax, %eax
   48 89 1d xx xx xx xx  mov    PL_op@GOTPCREL(%rip),%rbx
-  48 89 ?? xx xx xx xx  mov    PL_sig_pending@GOTPCREL(%rip),%rcx
+  48 89 1e xx xx xx xx  mov    PL_sig_pending@GOTPCREL(%rip),%rcx
 
   e8 xx xx xx xx       	call   Perl_pp_enter@PLT
   48 98                	cltq
@@ -39,34 +39,57 @@ L2:
 */
 
 T_CHARARR amd64_prolog[] = {
-  push_rbp,
-  mov_rsp_rbp,
-  push_r12, /* for register OP* op */
-  push_rbx,
-  mov_mem_rebx(0)
+    push_rbp,
+    mov_rsp_rbp,
+    sub_x_rsp(8),
+    push_r12, 	/* for register OP* op */
+    push_rbx, 	/* for &PL_op */
+#ifdef HAVE_DISPATCH
+    push_rcx,
+    mov_mem_recx, fourbyte,
+#endif
+    mov_mem_4ebp, fourbyte,
+    0x31,0xc0			/* xor    %eax, %eax */
 };
 unsigned char *push_prolog(unsigned char *code) {
-    unsigned char prolog[] = {
-        push_rbp,
-        mov_rsp_rbp,
-        push_r12,
-        push_rbx,
-        mov_mem_rebx(&PL_sig_pending),
-        mov_mem_4ebp(&PL_op) 
+    unsigned char p1[] = {
+	push_rbp,
+	mov_rsp_rbp,
+	push_r12
+#ifdef HAVE_DISPATCH
+	,push_rbx,
+	mov_mem_rebx
+#endif
     };
-    PUSHc(prolog);
+    unsigned char p_mov_plopptr[] = {
+	mov_mem_4ebp};
+    unsigned char p_xoreax[] = {
+	sub_x_rsp(8),
+	0x31,0xc0	
+    };
+    PUSHc(p1);
+#ifdef HAVE_DISPATCH
+    PUSHmov(&PL_sig_pending);
+#endif
+    PUSHc(p_mov_plopptr);
+    PUSHmov(&PL_op);
+    PUSHc(p_xoreax);			/* xor    %eax, %eax */
     return code;
 }
 T_CHARARR amd64_epilog[] = {
+  add_x_esp(8),
+#ifdef HAVE_DISPATCH
   pop_rbx,
+#endif
+  pop_r12,
   leave,
   ret};
 
-T_CHARARR amd64_call[]  = {0xe8};      /* callq PL_op->op_ppaddr@PLT */
+T_CHARARR amd64_call[]  = {0xb8,0x00,0x00,0x00,0x00,0xe8}; /* callq PL_op->op_ppaddr@PLT */
 T_CHARARR amd64_jmp[]   = {0xff,0x25}; /* jmp *$PL_op->op_ppaddr */
 T_CHARARR amd64_save_plop[]  = {
-  0x48,0x98,      /* cltq */
-  0x48,0x89,0x05  /* mov %rax,PL_op@REL(%rip) #save new PL_op */
+    0x48,0x98,      	/* cltq */
+    0x48,0x89,0x05	/* mov    %rax,memrel #save new PL_op */
 };      
 T_CHARARR amd64_nop[]        = {0x90};      /* pad */
 T_CHARARR amd64_nop2[]       = {0x90,0x90};      /* jmp pad */
@@ -76,15 +99,19 @@ T_CHARARR amd64_dispatch[] = {0x85,0xc9,0x74,0x06,
 T_CHARARR amd64_dispatch_post[] = {}; /* fails with msvc */
 
 T_CHARARR maybranch_plop[] = {
-  mov_mem_rebx(0),
-  mov_eax_8ebp
+    mov_mem_rebx, fourbyte,
+    mov_eax_8ebp
 };
 unsigned char *push_maybranch_plop(unsigned char *code) {
-  unsigned char maybranch_plop[] = {
-    mov_mem_rebx(&PL_op),
+  unsigned char maybranch_plop1[] = {
+      mov_mem_rebx
+  };
+  unsigned char maybranch_plop2[] = {
     mov_eax_8ebp
   };
-  PUSHc(maybranch_plop);
+  PUSHc(maybranch_plop1);
+  PUSHmov(&PL_op);
+  PUSHc(maybranch_plop2);
   return code;
 }
 
