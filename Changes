@@ -3,8 +3,9 @@ v0.03 2010-08-09 rurban
 Start with amd64/x86_64
 Include seperate CPU threaded/non-threaded c files
 Create run-jit.c and run-jit.o with .stabs when DEBUGGING
-More work on i386thr.c (not working)
-
+Refactor (maybranch) into jit_chain which runs twice to 
+  support branches eventually - ops which do not return op_next
+seperate tests, only 1.t works
 
 v0.02 2010-08-06 rurban
 
