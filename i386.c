@@ -33,8 +33,10 @@ T_CHARARR x86_prolog[] = {
     push_ebx,		/* &PL_op  */
     push_ecx,		/* reserve */
     sub_x_esp(8),	/* room for 2 locals: &PL_sig_pending and op */
-    mov_mem_rebx(0),    /* &PL_op to ebx */
-    mov_mem_4ebp(0)     /* &PL_sig_pending to -4(%ebp) */
+    mov_mem_rebx(0)    /* &PL_op to ebx */
+#ifdef HAVE_DISPATCH
+    ,mov_mem_4ebp(0)     /* &PL_sig_pending to -4(%ebp) */
+#endif
 };
 
 unsigned char * push_prolog(unsigned char *code) {
@@ -44,8 +46,11 @@ unsigned char * push_prolog(unsigned char *code) {
         push_ebx,
         push_ecx,
         sub_x_esp(8),
-        mov_mem_rebx(&PL_op),
-        mov_mem_4ebp(&PL_sig_pending) };
+        mov_mem_rebx(&PL_op)
+#ifdef HAVE_DISPATCH
+	,mov_mem_4ebp(&PL_sig_pending)
+#endif
+ };
     PUSHc(prolog);
     return code;
 }

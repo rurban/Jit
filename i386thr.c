@@ -41,11 +41,11 @@ epilog after final Perl_despatch_signals
 
 /* my_perl already on stack, Iop at 4(%ebx),  */
 #define X86THR_PROLOG					\
-    push_ebp,	/* save frame pointer*/			\
+    push_ebp,		/* save frame pointer*/		\
     mov_esp_ebp,	/* set new frame pointer */ 	\
     push_edi,						\
     push_esi,						\
-    push_ebx,	/* &my_perl */				\
+    push_ebx,		/* &my_perl */			\
     push_ecx,						\
     sub_x_esp(8),	/* room for 2 locals: op, p */ 	\
     mov_eax_ebx

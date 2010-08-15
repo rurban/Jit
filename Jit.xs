@@ -56,6 +56,9 @@ unsigned char *push_prolog(unsigned char *code);
 #ifdef DEBUGGING
 # define JIT_CHAIN(op, code, root) jit_chain(op, code, root, fh, stabs) 
 # define DEB_PRINT_LOC(loc) printf(loc" \t= 0x%x\n", loc)
+# if PERL_VERSION < 8
+#   define DEBUG_v(x) x
+# endif
 #else
 # define JIT_CHAIN(op, code, root) jit_chain(op, code, root) 
 # define DEB_PRINT_LOC(loc)
@@ -289,11 +292,13 @@ maybranch(OP* op) {
     case OP_MAPWHILE:
     case OP_AND:
     case OP_OR:
-    case OP_DOR:
     case OP_COND_EXPR:
     case OP_ANDASSIGN:
     case OP_ORASSIGN:
+#if PERL_VERSION > 8
+    case OP_DOR:
     case OP_DORASSIGN:
+#endif
     case OP_DBSTATE:
     case OP_RETURN:
     case OP_LAST:
@@ -301,11 +306,13 @@ maybranch(OP* op) {
     case OP_REDO:
     case OP_DUMP:
     case OP_GOTO:
-    case OP_ENTERWHEN:
     case OP_REQUIRE:
     case OP_ENTEREVAL:
     case OP_ENTERTRY:
+#if PERL_VERSION > 8
+    case OP_ENTERWHEN:
     case OP_ONCE:
+#endif
         return 1;
     default:
         return 0;
@@ -317,11 +324,13 @@ returnother(OP* op) {
     switch (op->op_type) { 	/* sync this list with B::CC */
     case OP_AND:
     case OP_OR:
+#if PERL_VERSION > 8
     case OP_DOR:
+    case OP_DORASSIGN:
+#endif
     case OP_COND_EXPR:
     case OP_ANDASSIGN:
     case OP_ORASSIGN:
-    case OP_DORASSIGN:
         return 1;
     default:
         return 0;
