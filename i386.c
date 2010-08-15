@@ -95,8 +95,5 @@ push_maybranch_plop(unsigned char *code) {
 # define DISPATCH_GETSIG x86_dispatch_getsig
 # define DISPATCH       x86_dispatch
 # define DISPATCH_POST  x86_dispatch_post
-# define MAYBRANCH_PLOP maybranch_plop 
-# define MAYBRANCH_ARGS
-# define MAYBRANCH_POST
 
 

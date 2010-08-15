@@ -127,6 +127,8 @@ T_CHARARR NOP[]      = {0x90};    /* nop */
 /* PROLOG */
 #define push_ebp    	0x55
 #define mov_esp_ebp 	0x89,0xe5
+#define push_edi 	0x57
+#define push_esi	0x56
 #define push_ebx 	0x53
 #define push_ecx	0x51
 #define mov_eax_ebx	0x89,0xc3
@@ -142,6 +144,9 @@ T_CHARARR NOP[]      = {0x90};    /* nop */
 #define add_x_esp(byte) 0x83,0xc4,byte	/* add    $0x4,%esp */
 #define pop_ecx    	0x59
 #define pop_ebx 	0x5b
+#define pop_esi 	0x5e
+#define pop_edi 	0x5f
+#define pop_ebp 	0x5d
 #define leave 		0xc9
 #define ret 		0xc3
 

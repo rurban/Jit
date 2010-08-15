@@ -41,24 +41,29 @@ epilog after final Perl_despatch_signals
 
 /* my_perl already on stack, Iop at 4(%ebx),  */
 #define X86THR_PROLOG					\
-    	push_ebp,	/* save frame pointer*/ 	\
-	mov_esp_ebp,	/* set new frame pointer */ 	\
-	push_ebx,	/* &my_perl */			\
-	push_ecx,					\
-	sub_x_esp(4),	/* room for 1 local: op */ 	\
-	mov_eax_ebx
+    push_ebp,	/* save frame pointer*/			\
+    mov_esp_ebp,	/* set new frame pointer */ 	\
+    push_edi,						\
+    push_esi,						\
+    push_ebx,	/* &my_perl */				\
+    push_ecx,						\
+    sub_x_esp(8),	/* room for 2 locals: op, p */ 	\
+    mov_eax_ebx
 static unsigned x86thr_prolog[] = { X86THR_PROLOG };
-void push_prolog(void) {
-    PUSHc(_CA(X86THR_PROLOG));
+unsigned char *push_prolog(unsigned char *code) {
+    PUSHc(x86thr_prolog);
+    return code;
 }
 
 T_CHARARR x86thr_epilog[] = {
-    add_x_esp(4),
+    add_x_esp(8),
     pop_ecx,
     pop_ebx,
-    leave,		/* restore esp */
+    pop_esi,
+    pop_edi,
+    leave,		/* restore esp, ebp */
     ret
-}
+};
 
 /* call near */
 T_CHARARR x86thr_call[]  = {
@@ -85,6 +90,19 @@ T_CHARARR x86thr_dispatch_post[] = {
     0xec,0x0c,0x31,0xdb,
     0x53,0x90
 };
+
+T_CHARARR maybranch_plop[] = {
+    mov_mem_rebx(0),
+    mov_eax_8ebp
+};
+unsigned char *
+push_maybranch_plop(unsigned char *code) {
+  unsigned char maybranch_plop[] = {
+    mov_mem_rebx(&PL_op),
+    mov_eax_8ebp};
+  PUSHc(maybranch_plop);
+  return code;
+}
 
 # define PROLOG 	x86thr_prolog
 # define CALL	 	x86thr_call

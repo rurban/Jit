@@ -13,14 +13,37 @@ static OP * pp_main(register PerlInterpreter* my_perl);
 
 static OP * pp_main(register PerlInterpreter* my_perl) 
 {
+    register OP* op; 
+    register int *p = &PL_sig_pending;
     my_perl->Iop = Perl_pp_enter(my_perl);
     my_perl->Iop = Perl_pp_nextstate(my_perl);
     my_perl->Iop = Perl_pp_print(my_perl);
     PERL_ASYNC_CHECK;
-    /*if (my_perl->Isig_pending) Perl_despatch_signals(my_perl);*/
+
+ maybranch_1:
+    op = my_perl->Iop->op_next;
+    my_perl->Iop = Perl_pp_cond_expr(my_perl);
+    if (*p)
+        Perl_despatch_signals(my_perl);
+    if (PL_op == op) /* false */
+        goto next_1;
+ other_1:
+    my_perl->Iop = Perl_pp_pushmark(my_perl);
+    my_perl->Iop = Perl_pp_const(my_perl);
+    my_perl->Iop = Perl_pp_print(my_perl);
+    goto leave_1; /* upper scope */
+
+ next_1:
+    my_perl->Iop = Perl_pp_enter(my_perl);
+    my_perl->Iop = Perl_pp_nextstate(my_perl);
+    if (*p)
+        Perl_despatch_signals(my_perl);
+    my_perl->Iop = Perl_pp_leave(my_perl);
+ leave_1:
+    my_perl->Iop = Perl_pp_leave(my_perl);
+
     my_perl->Iop = Perl_pp_leave(my_perl);
     PERL_ASYNC_CHECK;
-    /*if (my_perl->Isig_pending) Perl_despatch_signals(my_perl);*/
     return NULL;
 }
 
