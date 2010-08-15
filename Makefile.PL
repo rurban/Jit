@@ -49,6 +49,10 @@ cc_main_nt.dis: cc_main_nt
 
 cc_main_nt: cc_main_nt.c
 	\$(PERL) -S cc_harness cc_main_nt.c -fno-stack-protector -g3 -o cc_main_nt -save-temps -fverbose-asm
+
+3-jit-hand.dis: 3-jit-hand.S
+	as 3-jit-hand.S  -o 3-jit-hand.o
+	objdump -d 3-jit-hand.o > 3-jit-hand.dis
 "
   }
 }
