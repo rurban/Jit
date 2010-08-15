@@ -49,7 +49,6 @@ T_CHARARR amd64_prolog[] = {
     mov_mem_recx, fourbyte,
 #endif
     mov_mem_4ebp, fourbyte,
-    0x31,0xc0			/* xor    %eax, %eax */
 };
 unsigned char *push_prolog(unsigned char *code) {
     unsigned char p1[] = {
@@ -61,41 +60,48 @@ unsigned char *push_prolog(unsigned char *code) {
 	mov_mem_rebx
 #endif
     };
+    /*
     unsigned char p_mov_plopptr[] = {
 	mov_mem_4ebp};
+    */
     unsigned char p_xoreax[] = {
-	sub_x_rsp(8),
+	/*	sub_x_rsp(8), */
 	0x31,0xc0	
     };
     PUSHc(p1);
 #ifdef HAVE_DISPATCH
     PUSHmov(&PL_sig_pending);
 #endif
+    /*
     PUSHc(p_mov_plopptr);
     PUSHmov(&PL_op);
+    */
     PUSHc(p_xoreax);			/* xor    %eax, %eax */
     return code;
 }
 T_CHARARR amd64_epilog[] = {
-  add_x_esp(8),
+    /*add_x_esp(8),*/
 #ifdef HAVE_DISPATCH
-  pop_rbx,
+    pop_rbx,
 #endif
-  pop_r12,
-  leave,
-  ret};
+    pop_r12,
+    leave,
+    ret};
 
-T_CHARARR amd64_call[]  = {0xb8,0x00,0x00,0x00,0x00,0xe8}; /* callq PL_op->op_ppaddr@PLT */
+T_CHARARR amd64_call[]  = {
+    /*0xb8,0x00,0x00,0x00,0x00,*/ /* mox $0,%eax */
+    0xe8}; /* callq PL_op->op_ppaddr@PLT */
 T_CHARARR amd64_jmp[]   = {0xff,0x25}; /* jmp *$PL_op->op_ppaddr */
 T_CHARARR amd64_save_plop[]  = {
-    0x48,0x98,      	/* cltq */
-    0x48,0x89,0x05	/* mov    %rax,memrel #save new PL_op */
+    /*cltq,*/
+    mov_rax_memr	/* mov    %rax,memrel #save new PL_op */
 };      
 T_CHARARR amd64_nop[]        = {0x90};      /* pad */
 T_CHARARR amd64_nop2[]       = {0x90,0x90};      /* jmp pad */
 T_CHARARR amd64_dispatch_getsig[] = {0x8b,0x0d};
-T_CHARARR amd64_dispatch[] = {0x85,0xc9,0x74,0x06,
-			      0xFF,0x25};
+T_CHARARR amd64_dispatch[] = {
+    0x85,0xc9,0x74,0x06,
+    0xFF,0x25};
 T_CHARARR amd64_dispatch_post[] = {}; /* fails with msvc */
 
 T_CHARARR maybranch_plop[] = {
@@ -103,16 +109,16 @@ T_CHARARR maybranch_plop[] = {
     mov_eax_8ebp
 };
 unsigned char *push_maybranch_plop(unsigned char *code) {
-  unsigned char maybranch_plop1[] = {
-      mov_mem_rebx
-  };
-  unsigned char maybranch_plop2[] = {
-    mov_eax_8ebp
-  };
-  PUSHc(maybranch_plop1);
-  PUSHmov(&PL_op);
-  PUSHc(maybranch_plop2);
-  return code;
+    unsigned char maybranch_plop1[] = {
+	mov_mem_rebx
+    };
+    unsigned char maybranch_plop2[] = {
+	mov_eax_8ebp
+    };
+    PUSHc(maybranch_plop1);
+    PUSHmov(&PL_op);
+    PUSHc(maybranch_plop2);
+    return code;
 }
 
 # define PROLOG 	amd64_prolog
@@ -125,3 +131,10 @@ unsigned char *push_maybranch_plop(unsigned char *code) {
 # define DISPATCH_POST  amd64_dispatch_post
 # define EPILOG         amd64_epilog
 # define MAYBRANCH_PLOP maybranch_plop
+
+/*
+ * Local variables:
+ *   c-basic-offset: 4
+ * End:
+ * vim: expandtab shiftwidth=4:
+ */

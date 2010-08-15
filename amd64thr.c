@@ -53,23 +53,25 @@ T_CHARARR amd64thr_epilog[] = {
 };
 
 T_CHARARR amd64thr_call[]  = {
-  0x48,0x89,0xdf,	/* mov    %rbx,%rdi */
-  0x48,0x89,0x43,0x08,  /* mov    %rax,0x8(%rbx) */
-  0xe8};      		/* callq near offset $PL_op->op_ppaddr */
+    0x48,0x89,0xdf,	/* mov    %rbx,%rdi */
+    0x48,0x89,0x43,0x08,  /* mov    %rax,0x8(%rbx) */
+    0xe8};      		/* callq near offset $PL_op->op_ppaddr */
 T_CHARARR amd64thr_jmp[]   = {0xff,0x25}; /* jmp *$PL_op->op_ppaddr */
 T_CHARARR amd64thr_save_plop[]  = {
-  0x48,0x89,0x05  /* mov %rax,0x5d14ec(%rip) #save new PL_op */
+    0x48,0x89,0x05  /* mov %rax,0x5d14ec(%rip) #save new PL_op */
 };      
 T_CHARARR amd64thr_nop2[]       = {0x90,0x90};      /* jmp pad */
-T_CHARARR amd64thr_dispatch_getsig[] = {0x8b,0x0d};
+T_CHARARR amd64thr_dispatch_getsig[] = {
+    0x8b,0x0d};
 /*
   74 08                	je     40092c <main+0x38>
   48 89 df             	mov    %rbx,%rdi
   e8 8c fe ff ff       	callq  4007b8 <Perl_despatch_signals@plt>
   31 db                	xor    %ebx,%ebx
 */
-T_CHARARR amd64thr_dispatch[] = {0x85,0xc9,0x74,0x06,
-				 0xFF,0x25};
+T_CHARARR amd64thr_dispatch[] = {
+    0x85,0xc9,0x74,0x06,
+    0xFF,0x25};
 T_CHARARR amd64thr_dispatch_post[] = {0x31,0xdb};
 
 #define mov_rbx_rdi 	0x48,0x89,0xdf
@@ -81,9 +83,10 @@ T_CHARARR maybranch_plop[] = {
     mov_rax_8rbx,
     mov_rrax_r12
 };
-unsigned char *push_maybranch_plop(unsigned char *code) {
-  PUSHc(maybranch_plop);
-  return code;
+unsigned char *
+push_maybranch_plop(unsigned char *code) {
+    PUSHc(maybranch_plop);
+    return code;
 }
 
 
@@ -95,3 +98,10 @@ unsigned char *push_maybranch_plop(unsigned char *code) {
 # define DISPATCH       amd64thr_dispatch
 # define DISPATCH_POST  amd64thr_dispatch_post
 # define EPILOG         amd64thr_epilog
+
+/*
+ * Local variables:
+ *   c-basic-offset: 4
+ * End:
+ * vim: expandtab shiftwidth=4:
+ */

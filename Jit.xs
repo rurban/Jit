@@ -1,4 +1,4 @@
-/*    Jit.xs -*- C -*-
+/*    Jit.xs -*- C c-basic-offset:4 -*-
  *
  *    JIT (Just-in-time compile) the Perl5 runloop.
  *    Currently for x86 32bit, amd64 64bit. More CPU's later.
@@ -69,9 +69,10 @@ C pseudocode of the Perl runloop:
 
 not-threaded:
 
+  OP *op;
   int *p = &Perl_Isig_pending_ptr;
 if maybranch:
-  op = PL_op; 
+  op = PL_op;
   PL_op = Perl_pp_opname();  #returns op_next, op_other, op_first, op_last or a new optree start
   if dispatch_needed: if (*p) Perl_despatch_signals();
     if (PL_op == op) 	#if maybranch label other targets
@@ -104,12 +105,11 @@ threaded, same logic as above, just:
 #define CALL_SIZE  4				/* size for the call instruction arg */
 #define MOV_SIZE   4				/* size for the mov instruction arg */
 #ifdef USE_ITHREADS
-/* this offset is perl version and ptrsize dependent */
+/* threads: offsets are perl version and ptrsize dependent */
 # define IOP_OFFSET 		PTRSIZE		/* my_perl->Iop_pending offset */
 # define SIG_PENDING_OFFSET 	4*PTRSIZE	/* my_perl->Isig_pending offset */
 #endif
 
-#define _CA(x)    	(unsigned char*){ x }
 #define CALL_ABS(abs) 	call_abs(code,abs)
 /*(U32)((unsigned char*)abs-code-3)*/
 #define PUSHc(what) memcpy(code,what,sizeof(what)); code += sizeof(what)
@@ -126,7 +126,6 @@ threaded, same logic as above, just:
 
 T_CHARARR NOP[]      = {0x90};    /* nop */
 
-/* PROLOG and EPILOG are untyped - no _CA */
 /* PROLOG */
 #define push_ebp    	0x55
 #define mov_esp_ebp 	0x89,0xe5
@@ -186,13 +185,14 @@ T_CHARARR NOP[]      = {0x90};    /* nop */
 #define MOV_REL
 
 #define PUSHmov(where) { \
-    U32 r = (unsigned char*)where - (code+4); \
+    U32 r = (unsigned char*)where - (code+MOV_SIZE);	\
     memcpy(code,&r,MOV_SIZE); code += MOV_SIZE; \
 }
+void f_PUSHmov(unsigned char* code, void *where);
+/*#define PUSHmov(where) f_PUSHmov(code,(void*)where); code += MOV_SIZE;*/
 
 T_CHARARR NOP[]      = {0x90};    /* nop */
 
-/* PROLOG and EPILOG are untyped - no _CA */
 /* PROLOG */
 #define push_rbp    	0x55
 #define mov_rsp_rbp 	0x48,0x89,0xe5
@@ -219,11 +219,13 @@ T_CHARARR NOP[]      = {0x90};    /* nop */
 /* maybranch: */
 /* &op in -8(%ebp) */
 #define mov_eax_8ebp 	0x89,0x45,0xf8
+#define cltq 		0x48,0x98
+#define mov_0_rax	0xb8,0x00,0x00,0x00,0x00
 
 #define call 		0xe8	    /* + 4 rel */
 #define ljmp(abs) 	0xff,0x25   /* + 4 memabs */
-#define mov_eax_mem 	0xa3	    /* + 4 memabs */
 /* mov    %rax,(%rbx) &PL_op in ebx */
+#define mov_rax_memr    0x48,0x89,0x05
 #define mov_eax_rebx    0x89,0x03
 #define mov_4ebp_edx    0x8b,0x55,0xfc
 #define mov_redx_eax    0x82,0x02
@@ -237,6 +239,12 @@ T_CHARARR NOP[]      = {0x90};    /* nop */
 #else
 # include "amd64.c"
 #endif
+
+void f_PUSHmov(unsigned char* code, void *where) {
+    U32 r = (unsigned char*)where - (code+MOV_SIZE);
+    memcpy(code,&r,MOV_SIZE); 
+}
+
 #endif
 
 #ifndef JIT_CPU
@@ -306,7 +314,7 @@ maybranch(OP* op) {
     case OP_REDO:
     case OP_DUMP:
     case OP_GOTO:
-    case OP_REQUIRE:
+    case OP_REQUIRE: /* ? */
     case OP_ENTEREVAL:
     case OP_ENTERTRY:
 #if PERL_VERSION > 8
@@ -331,29 +339,29 @@ returnother(OP* op) {
     case OP_COND_EXPR:
     case OP_ANDASSIGN:
     case OP_ORASSIGN:
-        return 1;
+	return 1;
     default:
-        return 0;
+	return 0;
     }
 }
 
 unsigned char *
 call_abs (unsigned char *code, void *addr) {
-  /* intel specific: */
-  register signed long rel = (unsigned char*)addr - code - sizeof(CALL) - CALL_SIZE;
-  if (rel > (unsigned int)PERL_ULONG_MAX) {
-    PUSHc(JMP);
-    PUSHcall(addr);
-    /* 386 far calls prefer 2 nop's afterwards, align it to 4 (0,4,8,c)*/
+    /* intel specific: */
+    register signed long rel = (unsigned char*)addr - code - sizeof(CALL) - CALL_SIZE;
+    if (rel > (unsigned int)PERL_ULONG_MAX) {
+	PUSHc(JMP);
+	PUSHcall(addr);
+	/* 386 far calls prefer 2 nop's afterwards, align it to 4 (0,4,8,c)*/
 #if CALL_ALIGN
-    while (((unsigned int)&code | 0xfffffff0) % CALL_ALIGN) { *(code++) = NOP[0]; }
+	while (((unsigned int)&code | 0xfffffff0) % CALL_ALIGN) { *(code++) = NOP[0]; }
 #endif
-  } else {
-    U32 urel = (U32)rel;
-    PUSHc(CALL);
-    PUSHcall(urel);
-  }
-  return code;
+    } else {
+	U32 urel = (U32)rel;
+	PUSHc(CALL);
+	PUSHcall(urel);
+    }
+    return code;
 }
 
 int
@@ -362,130 +370,165 @@ jit_chain(
 	  unsigned char *code, 
 	  unsigned char *root
 #ifdef DEBUGGING
-	  , FILE *fh, FILE *stabs
+	  ,FILE *fh, FILE *stabs
 #endif
 	  )
 {
-  int dryrun = !code;
-  int size = 0;
+    int dryrun = !code;
+    int size = 0;
 #ifdef DEBUGGING
-  static int line = 0;
-  char *opname;
-  if (!dryrun)
-    fprintf(fh, "/* block jit_chain op 0x%x; */\n", op);
+    static int line = 0;
+    char *opname;
+    if (!dryrun)
+	opname = PL_op_name[op->op_type];
+    fprintf(fh, "/* block jit_chain op 0x%x pp_%s; */\n", op, opname);
 #endif
-  do {
+    do {
 #ifdef DEBUGGING
-    if (!dryrun) {
-      opname = PL_op_name[op->op_type];
-      DEBUG_v( printf("#pp_%s \t= 0x%x\n", opname, op->op_ppaddr));
-    }
+	if (!dryrun) {
+	    opname = PL_op_name[op->op_type];
+	    DEBUG_v( printf("#pp_%s \t= 0x%x\n", opname, op->op_ppaddr));
+	}
 #endif
-    if (op->op_type == OP_NULL) continue;
+	if (op->op_type == OP_NULL) continue;
 # if defined(DEBUGGING) && defined(__GNUC__)
-    if (!dryrun) {
-      fprintf(stabs, ".stabn 68,0,%d,%d /* call pp_%s */\n",
-	      ++line, code-root, opname);
-    }
+	if (!dryrun) {
+	    fprintf(stabs, ".stabn 68,0,%d,%d /* call pp_%s */\n",
+		    ++line, code-root, opname);
+	}
 # endif
-    if (maybranch(op)) {
-      if (dryrun) {
-	size += sizeof(maybranch_plop);
-	size += sizeof(CALL); size += CALL_SIZE;
-      } else {
-	code = push_maybranch_plop(code);
-	code = CALL_ABS(op->op_ppaddr);
-      }
-      if ((PL_opargs[op->op_type] & OA_CLASS_MASK) == OA_LOGOP) {
-	int label = JIT_CHAIN(cLOGOPx(op)->op_other, code, root);
-	size += label-(int)code;
-      }
-    }
-
-    if (!dryrun) {
-#ifdef DEBUGGING
-# ifdef USE_ITHREADS
-      fprintf(fh, "my_perl->Iop = Perl_pp_%s(my_perl);\n", opname);
-# else
-      fprintf(fh, "PL_op = Perl_pp_%s();\n", opname);
-# endif
-#endif
-    }
-    if (dryrun) {
-      size += sizeof(CALL); size += CALL_SIZE;
-    } else {
-      code = CALL_ABS(op->op_ppaddr);
-#if defined(DEBUGGING) && defined(__GNUC__)
-      fprintf(stabs, ".stabn 68,0,%d,%d /* PL_op = eax */\n",
-	      ++line, code-root);
-#endif
-    }
-
-    if (dryrun) {
-      size += sizeof(SAVE_PLOP);
-    } else {
-      PUSHc(SAVE_PLOP);
-    }
-#if !defined(USE_ITHREADS)
-    if (dryrun) {
-      size += MOV_SIZE;
-    } else {
-#ifdef MOV_REL
-      PUSHmov(&op);
+	if (maybranch(op)) {
+	    if (dryrun) {
+		size += sizeof(maybranch_plop);
+		size += sizeof(CALL); size += CALL_SIZE;
+	    } else {
+		code = push_maybranch_plop(code);
+		code = CALL_ABS(op->op_ppaddr);
+	    }
+	    if ((PL_opargs[op->op_type] & OA_CLASS_MASK) == OA_LOGOP) {
+		/* TODO store and jump to labels */
+		int label = JIT_CHAIN(cLOGOPx(op)->op_other, code, root);
+		size += label-(int)code;
+	    } else {
+		int next, label;
+		/* need to check the returned op at runtime? we'd need an indirect call then.
+		*/
+		switch (op->op_type) { 	/* sync this list with B::CC */
+		case OP_FLIP:
+		    if ((op->op_flags & OPf_WANT) == OPf_WANT_LIST) {
+			label = JIT_CHAIN(cLOGOPx(cUNOPx(op)->op_first)->op_other, code, root);
+			size += label-(int)code;
+		    }
+		    break;
+		case OP_ENTERLOOP:
+		case OP_ENTERITER:
+		    JIT_CHAIN(cLOOPx(op)->op_nextop, code, root);
+		    JIT_CHAIN(cLOOPx(op)->op_lastop, code, root);
+		    JIT_CHAIN(cLOOPx(op)->op_redoop, code, root);
+		    break;
+		case OP_SUBSTCONT:
+		    next = JIT_CHAIN(cLOGOPx(op)->op_other, code, root);
+		    size += next-(int)code;
+#if PERL_VERSION > 8
+# define PMREPLSTART(op) (op)->op_pmstashstartu.op_pmreplstart
 #else
-      OP *op_ptr = &op;
-      PUSHmov(&op_ptr);
+# define PMREPLSTART(op) (op)->op_pmreplstart
 #endif
-    }
+		    label = JIT_CHAIN(PMREPLSTART(cPMOPx(op)), code, root);
+		    size += label-(int)code;
+		    /* TODO runtime check: goto label, else return next->next */
+		case OP_GOTO:
+		    /* TODO runtime check: goto label */
+		default:
+		    warn("unsupport branch for %s", PL_op_name[op->op_type]);
+		}
+	    }
+	}
+	
+	if (!dryrun) {
+#ifdef DEBUGGING
+# ifdef USE_ITHREADS
+	    fprintf(fh, "my_perl->Iop = Perl_pp_%s(my_perl);\n", opname);
+# else
+	    fprintf(fh, "PL_op = Perl_pp_%s();\n", opname);
+# endif
+#endif
+	}
+	if (dryrun) {
+	    size += sizeof(CALL); size += CALL_SIZE;
+	} else {
+	    code = CALL_ABS(op->op_ppaddr);
+#if defined(DEBUGGING) && defined(__GNUC__)
+	    fprintf(stabs, ".stabn 68,0,%d,%d /* PL_op = eax */\n",
+		    ++line, code-root);
+#endif
+	}
+
+	if (dryrun) {
+	    size += sizeof(SAVE_PLOP);
+	} else {
+	    PUSHc(SAVE_PLOP);
+	}
+#if !defined(USE_ITHREADS)
+	if (dryrun) {
+	    size += MOV_SIZE;
+	} else {
+#ifdef MOV_REL
+	    PUSHmov(&op);
+#else
+	    OP *op_ptr = &op;
+	    PUSHmov(&op_ptr);
+#endif
+	}
 #endif
 
-    if (DISPATCH_NEEDED(op)) {
-      /*dispatch++;*/
+	if (DISPATCH_NEEDED(op)) {
+	    /*dispatch++;*/
 #ifdef DEBUGGING
-      if (!dryrun) {
+	    if (!dryrun) {
 # ifdef USE_ITHREADS
-	fprintf(fh, "if (my_perl->Isig_pending)\n  Perl_despatch_signals(my_perl);\n");
+		fprintf(fh, "if (my_perl->Isig_pending)\n  Perl_despatch_signals(my_perl);\n");
 # else
-	fprintf(fh, "if (PL_sig_pending)\n  Perl_despatch_signals();\n");
+		fprintf(fh, "if (PL_sig_pending)\n  Perl_despatch_signals();\n");
 # endif
 # ifdef __GNUC__
-	fprintf(stabs, ".stabn 68,0,%d,%d /* if (PL_sig_pending) */\n",
-		++line, code-root);
+		fprintf(stabs, ".stabn 68,0,%d,%d /* if (PL_sig_pending) */\n",
+			++line, code-root);
 # endif
-      }
+	    }
 #endif
 #ifdef HAVE_DISPATCH
 # ifndef USE_ITHREADS
-      if (dryrun) {
-	size += sizeof(DISPATCH_GETSIG);
-	size += MOV_SIZE;
-      } else {
-	PUSHc(DISPATCH_GETSIG);
-	PUSHmov(&PL_sig_pending);
+	    if (dryrun) {
+		size += sizeof(DISPATCH_GETSIG);
+		size += MOV_SIZE;
+	    } else {
+		PUSHc(DISPATCH_GETSIG);
+		PUSHmov(&PL_sig_pending);
 #  if defined(DEBUGGING) && defined(__GNUC__)
-	fprintf(stabs, ".stabn 68,0,%d,%d /* Perl_despatch_signals() */\n",
-		++line, code-root);
+		fprintf(stabs, ".stabn 68,0,%d,%d /* Perl_despatch_signals() */\n",
+			++line, code-root);
 #  endif
-      }
+	    }
 # endif
-      if (dryrun) {
-	size += sizeof(DISPATCH);
-	size += MOV_SIZE;
-      } else {
-	PUSHc(DISPATCH);
-	PUSHmov(&Perl_despatch_signals);
-      }
+	    if (dryrun) {
+		size += sizeof(DISPATCH);
+		size += MOV_SIZE;
+	    } else {
+		PUSHc(DISPATCH);
+		PUSHmov(&Perl_despatch_signals);
+	    }
 # ifdef USE_ITHREADS
-      if (dryrun) {
-	size += sizeof(DISPATCH_POST);
-      } else {
-	PUSHc(DISPATCH_POST);
-      }
+	    if (dryrun) {
+		size += sizeof(DISPATCH_POST);
+	    } else {
+		PUSHc(DISPATCH_POST);
+	    }
 # endif
 #endif
-    }
-  } while (op = op->op_next);
-  return dryrun ? size : (int)code;
+	}
+    } while (op = op->op_next);
+    return dryrun ? size : (int)code;
 }
 
 /*
@@ -610,7 +653,7 @@ Perl_runops_jit(pTHX)
     code = code_sav;
 #ifdef HAS_MPROTECT
     if (mprotect(code,size*sizeof(char),PROT_EXEC|PROT_READ|PROT_WRITE) < 0)
-      croak ("mprotect 0x%x for %u failed", code, size);
+	croak ("mprotect 0x%x for %u failed", code, size);
 #endif
     /* XXX Missing. Prepare for execution: flush CPU cache. Needed only on ppc32 and ppc64 */
 

@@ -84,11 +84,11 @@ T_CHARARR maybranch_plop[] = {
 };
 unsigned char *
 push_maybranch_plop(unsigned char *code) {
-  unsigned char maybranch_plop[] = {
-    mov_mem_rebx(&PL_op),
-    mov_eax_8ebp};
-  PUSHc(maybranch_plop);
-  return code;
+    unsigned char maybranch_plop[] = {
+	mov_mem_rebx(&PL_op),
+	mov_eax_8ebp};
+    PUSHc(maybranch_plop);
+    return code;
 }
 
 
@@ -102,3 +102,9 @@ push_maybranch_plop(unsigned char *code) {
 # define DISPATCH_POST  x86_dispatch_post
 
 
+/*
+ * Local variables:
+ *   c-basic-offset: 4
+ * End:
+ * vim: expandtab shiftwidth=4:
+ */

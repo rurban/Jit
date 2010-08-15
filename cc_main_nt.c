@@ -13,15 +13,44 @@ static OP * pp_main();
 
 static OP * pp_main() 
 {
-    dVAR;
-    /*register OP *op = PL_op;*/
-    PL_op = pp_enter();
-    PL_op = pp_nextstate();
-    PERL_ASYNC_CHECK;
-    PL_op = pp_print();
-    PERL_ASYNC_CHECK;
-    PL_op = pp_leave();
-    PERL_ASYNC_CHECK;
+    register OP* op; 
+    register int *plop = &PL_op;
+    register int *p = &PL_sig_pending;
+
+    PL_op = Perl_pp_enter();
+    PL_op = Perl_pp_nextstate();
+    PL_op = Perl_pp_const();
+    PL_op = Perl_pp_padsv();
+    PL_op = Perl_pp_sassign();
+    PL_op = Perl_pp_nextstate();
+    if (*p)
+        Perl_despatch_signals();
+    PL_op = Perl_pp_padsv();
+    PL_op = Perl_pp_const();
+    PL_op = Perl_pp_gt();
+
+ maybranch_1:
+    op = PL_op->op_next;
+    PL_op = Perl_pp_cond_expr();
+    if (*p)
+        Perl_despatch_signals();
+    if (PL_op == op) /* false */
+        goto next_1;
+ other_1:
+    PL_op = Perl_pp_pushmark();
+    PL_op = Perl_pp_const();
+    PL_op = Perl_pp_print();
+    goto leave_1; /* upper scope */
+
+ next_1:
+    PL_op = Perl_pp_enter();
+    PL_op = Perl_pp_nextstate();
+    if (*p)
+        Perl_despatch_signals();
+    PL_op = Perl_pp_leave();
+ leave_1:
+    PL_op = Perl_pp_leave();
+
     TAINT_NOT;
     return NULL;
 }
@@ -29,5 +58,7 @@ static OP * pp_main()
 int
 main(int argc, char **argv, char **env)
 {
+    int a = 0;
     pp_main();
+    return a;
 }

@@ -97,11 +97,11 @@ T_CHARARR maybranch_plop[] = {
 };
 unsigned char *
 push_maybranch_plop(unsigned char *code) {
-  unsigned char maybranch_plop[] = {
-    mov_mem_rebx(&PL_op),
-    mov_eax_8ebp};
-  PUSHc(maybranch_plop);
-  return code;
+    unsigned char maybranch_plop[] = {
+	mov_mem_rebx(&PL_op),
+	mov_eax_8ebp};
+    PUSHc(maybranch_plop);
+    return code;
 }
 
 # define PROLOG 	x86thr_prolog
@@ -112,3 +112,10 @@ push_maybranch_plop(unsigned char *code) {
 # define DISPATCH       x86thr_dispatch
 # define DISPATCH_POST  x86thr_dispatch_post
 # define EPILOG         x86thr_epilog
+
+/*
+ * Local variables:
+ *   c-basic-offset: 4
+ * End:
+ * vim: expandtab shiftwidth=4:
+ */

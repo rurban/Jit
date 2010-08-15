@@ -1,5 +1,5 @@
 print "1..1\n";
-use Config;
+#use Config;
 my $c = qq($^X -Mblib -MJit);
 #$c .= " -Dv" if $Config{ccflags} =~ /-DDEBUGGING/;
 
