@@ -29,14 +29,29 @@ x86_64/amd64 threaded, PL_op in rax, PL_sig_pending in rbx
 */
 
 T_CHARARR amd64thr_prolog[] = {
-  0x55,			/* push   %rbp */
-  0x48,0x89,0xe5,	/* mov    %rsp, %rbp */
-  0x48,0x83,0xec,STACK_SPACE
-#if PERL_VERSION < 13
-  ,0x53,		/* push   %rbx */
-  0x31,0xdb             /* xor    %ebx,%ebx */
+    push_rbp,
+    mov_rsp_rbp,
+    sub_x_rsp(8),
+    push_r12
+#ifdef HAVE_DISPATCH
+    ,push_rbx,
+    0x31,0xdb             /* xor    %ebx,%ebx */
 #endif
 };
+unsigned char *push_prolog(unsigned char *code) {
+    PUSHc(amd64thr_prolog);
+    return code;
+}
+T_CHARARR amd64thr_epilog[] = {
+#ifdef HAVE_DISPATCH
+    pop_rbx,
+#endif
+    pop_r12,
+    add_x_esp(8),
+    leave,
+    ret
+};
+
 T_CHARARR amd64thr_call[]  = {
   0x48,0x89,0xdf,	/* mov    %rbx,%rdi */
   0x48,0x89,0x43,0x08,  /* mov    %rax,0x8(%rbx) */
@@ -55,10 +70,22 @@ T_CHARARR amd64thr_dispatch_getsig[] = {0x8b,0x0d};
 */
 T_CHARARR amd64thr_dispatch[] = {0x85,0xc9,0x74,0x06,
 				 0xFF,0x25};
-T_CHARARR amd64thr_dispatch_post[] = {0x31,0xdb}; /* fails with msvc */
-T_CHARARR amd64thr_epilog[] = {0x89,0xec,          /* movl    %ebp,%esp */
-			       0x5d,               /* popl    %ebp */
-			       0xc3};              /* ret */
+T_CHARARR amd64thr_dispatch_post[] = {0x31,0xdb};
+
+#define mov_rbx_rdi 	0x48,0x89,0xdf
+#define mov_rax_8rbx 	0x48,0x89,0x43,0x08
+#define mov_rrax_r12	0x4c,0x8b,0x20
+
+T_CHARARR maybranch_plop[] = {
+    mov_rbx_rdi,
+    mov_rax_8rbx,
+    mov_rrax_r12
+};
+unsigned char *push_maybranch_plop(unsigned char *code) {
+  PUSHc(maybranch_plop);
+  return code;
+}
+
 
 # define PROLOG 	amd64thr_prolog
 # define CALL	 	amd64thr_call
