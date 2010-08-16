@@ -28,7 +28,10 @@ WriteMakefile(
 );
 
 sub MY::depend {
-  "Jit.c : i386.c i386thr.c amd64.c amd64thr.c\n";
+  "
+Jit.c : i386.c i386thr.c amd64.c amd64thr.c
+t : test
+";
 }
 
 sub MY::postamble {
@@ -42,7 +45,7 @@ cc_main: cc_main.c
 	\$(PERL) -S cc_harness cc_main.c -fno-stack-protector -g3 -o cc_main -save-temps -fverbose-asm
 "
   } else {
-    "asm : cc_main_nt.dis
+    "asm : cc_main_nt.dis 3-jit-hand.dis
 
 cc_main_nt.dis: cc_main_nt
 	objdump -d -S cc_main_nt > cc_main_nt.dis

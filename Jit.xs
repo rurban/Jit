@@ -133,14 +133,15 @@ T_CHARARR NOP[]      = {0x90};    /* nop */
 #define push_esi	0x56
 #define push_ebx 	0x53
 #define push_ecx	0x51
-#define mov_eax_ebx	0x89,0xc3
 #define sub_x_esp(byte) 0x83,0x3c,byte
+#define mov_eax_rebx	0x89,0xc3	/* mov    %rax,(%rbx) &PL_op in ebx */
 /* mov    $memabs,(%ebx) &PL_op in ebx */
 #define mov_mem_rebx(m)	0xc7,0x03,(((unsigned int)m)&0xff),(((unsigned int)m)&0xff00),\
         		           (((unsigned int)m)&0xff0000),(((unsigned int)m)&0xff000000)
 /* &PL_sig_pending in -4(%ebp) */
 #define mov_mem_4ebp(m)	0xc7,0x45,0xfc,(((unsigned int)m)&0xff000000),(((unsigned int)m)&0xff0000),\
 					(((unsigned int)m)&0xff00),(((unsigned int)m)&0xff)
+#define mov_mem_recx 	0x8b,0x0d
 
 /* EPILOG */
 #define add_x_esp(byte) 0x83,0xc4,byte	/* add    $0x4,%esp */
@@ -160,8 +161,6 @@ T_CHARARR NOP[]      = {0x90};    /* nop */
 #define call 		0xe8	    /* + 4 rel */
 #define ljmp(abs) 	0xff,0x25   /* + 4 memabs */
 #define mov_eax_mem 	0xa3	    /* + 4 memabs */
-/* mov    %rax,(%rbx) &PL_op in ebx */
-#define mov_eax_rebx    0x89,0x03
 
 #define mov_4ebp_edx    0x8b,0x55,0xfc
 #define mov_redx_eax    0x82,0x02
@@ -379,6 +378,7 @@ jit_chain(
 #ifdef DEBUGGING
     static int line = 0;
     char *opname;
+
     if (!dryrun)
 	opname = PL_op_name[op->op_type];
     fprintf(fh, "/* block jit_chain op 0x%x pp_%s; */\n", op, opname);

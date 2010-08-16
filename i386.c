@@ -28,14 +28,14 @@ epilog:
 /* Usage: sizeof(PROLOG) + PUSHc(PROLOG) */
 
 T_CHARARR x86_prolog[] = {
-    push_ebp,		/* save frame pointer*/
+    push_ebp,		/* save frame pointer */	
     mov_esp_ebp,	/* set new frame pointer */
     push_ebx,		/* &PL_op  */
-    push_ecx,		/* reserve */
+    push_ecx,		/* &PL_sig_pending */
     sub_x_esp(8),	/* room for 2 locals: &PL_sig_pending and op */
-    mov_mem_rebx(0)    /* &PL_op to ebx */
+    mov_mem_rebx(0)    	/* &PL_op to ebx */
 #ifdef HAVE_DISPATCH
-    ,mov_mem_4ebp(0)     /* &PL_sig_pending to -4(%ebp) */
+    ,mov_mem_4ebp(0)    /* &PL_sig_pending to -4(%ebp) */
 #endif
 };
 
@@ -43,8 +43,8 @@ unsigned char * push_prolog(unsigned char *code) {
     unsigned char prolog[] = {
         push_ebp,
         mov_esp_ebp,
-        push_ebx,
-        push_ecx,
+        push_ebx,	/* &PL_op */
+        push_ecx,	/* &PL_sig_pending */
         sub_x_esp(8),
         mov_mem_rebx(&PL_op)
 #ifdef HAVE_DISPATCH
@@ -66,7 +66,8 @@ T_CHARARR x86_epilog[] = {
 T_CHARARR x86_call[]  = {0xe8};      	/* call near offset $PL_op->op_ppaddr */
 T_CHARARR x86_jmp[]   = {0xff,0x25}; 	/* jmp *$PL_op->op_ppaddr */
 T_CHARARR x86_save_plop[]  = {
-    mov_eax_8ebp			/* &PL_op in -8(%ebp) */
+    /*mov_eax_8ebp*/			/* &PL_op in -8(%ebp) */
+    mov_eax_rebx			/* &PL_op in %ebx */
 };
 T_CHARARR x86_dispatch_getsig[] = {
     0x8b,0x0d		/* mov $PL_sig_pending,%ecx */

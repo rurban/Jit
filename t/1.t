@@ -1,7 +1,7 @@
 print "1..1\n";
-#use Config;
+use Config;
 my $c = qq($^X -Mblib -MJit);
-#$c .= " -Dv" if $Config{ccflags} =~ /-DDEBUGGING/;
+$c .= " -Dv" if $Config{ccflags} =~ /-DDEBUGGING/;
 
 my $p = q( -e 'print q(ok);');
 print "# gdb --args $c $p\n";
