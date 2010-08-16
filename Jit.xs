@@ -1,4 +1,4 @@
-/*    Jit.xs -*- C c-basic-offset:4 -*-
+/*    Jit.xs -*- mode:C c-basic-offset:4 -*-
  *
  *    JIT (Just-in-time compile) the Perl5 runloop.
  *    Currently for x86 32bit, amd64 64bit. More CPU's later.
@@ -638,7 +638,7 @@ Perl_runops_jit(pTHX)
     fclose(stabs);
     system("as run-jit.s -o run-jit.o");
 # endif
-# if HAVE_DISPATCH
+# ifdef HAVE_DISPATCH
     DEBUG_v( printf("#Perl_despatch_signals \t= 0x%x\n",
                     Perl_despatch_signals) );
 #  if !defined(USE_ITHREADS)
