@@ -1,3 +1,7 @@
+v0.0301 2010-08-28 rurban
+
+Oops, add missing {i386,amd64}.c code to MANIFEST
+
 v0.03 2010-08-09 rurban
 
 Start with amd64/x86_64

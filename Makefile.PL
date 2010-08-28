@@ -33,22 +33,22 @@ sub MY::depend {
 
 sub MY::postamble {
   if ($Config{useithreads}) {
-    "asm : cc_main.dis
+    "asm : help/cc_main.dis
 
-cc_main.dis: cc_main
-	objdump -d -S cc_main > cc_main.dis
+help/cc_main.dis: help/cc_main
+	objdump -d -S help/cc_main > help/cc_main.dis
 
-cc_main: cc_main.c
-	\$(PERL) -S cc_harness cc_main.c -fno-stack-protector -g3 -o cc_main -save-temps -fverbose-asm
+help/cc_main: help/cc_main.c
+	\$(PERL) -S cc_harness help/cc_main.c -fno-stack-protector -g3 -o help/cc_main -save-temps -fverbose-asm
 "
   } else {
-    "asm : cc_main_nt.dis
+    "asm : help/cc_main_nt.dis
 
-cc_main_nt.dis: cc_main_nt
-	objdump -d -S cc_main_nt > cc_main_nt.dis
+help/cc_main_nt.dis: help/cc_main_nt
+	objdump -d -S help/cc_main_nt > help/cc_main_nt.dis
 
-cc_main_nt: cc_main_nt.c
-	\$(PERL) -S cc_harness cc_main_nt.c -fno-stack-protector -g3 -o cc_main_nt -save-temps -fverbose-asm
+help/cc_main_nt: help/cc_main_nt.c
+	\$(PERL) -S cc_harness help/cc_main_nt.c -fno-stack-protector -g3 -o help/cc_main_nt -save-temps -fverbose-asm
 "
   }
 }
