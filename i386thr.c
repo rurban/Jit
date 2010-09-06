@@ -47,8 +47,9 @@ epilog after final Perl_despatch_signals
     push_esi,						\
     push_ebx,		/* &my_perl */			\
     push_ecx,						\
-    sub_x_esp(8),	/* room for 2 locals: op, p */ 	\
-    mov_eax_ebx
+    sub_x_esp(8)	/* room for 2 locals: op, p */ 	\
+    /*mov_eax_ebx*/
+
 static unsigned x86thr_prolog[] = { X86THR_PROLOG };
 unsigned char *push_prolog(unsigned char *code) {
     PUSHc(x86thr_prolog);

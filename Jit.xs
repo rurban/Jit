@@ -565,6 +565,8 @@ Perl_runops_jit(pTHX)
 #if !defined(MOV_REL) && !defined(USE_ITHREADS)
     void *PL_op_ptr = &PL_op;
 #endif
+    OP * root;
+    int pagesize = 4096, size = 0;
 
     /* quirky pass 1: need size to allocate code.
        PL_slab_count should be near the optree size, but our method is safe.
@@ -583,8 +585,8 @@ Perl_runops_jit(pTHX)
             global_loops, global_loops);
     line += 2;
 #endif
-    OP * root = PL_op;
-    int size = 0;
+    root = PL_op;
+    size = 0;
     size += sizeof(PROLOG);
     size += JIT_CHAIN(PL_op, NULL, NULL);
     size += sizeof(EPILOG);
@@ -595,11 +597,20 @@ Perl_runops_jit(pTHX)
 			MEM_COMMIT | MEM_RESERVE,
 			PAGE_EXECUTE_READWRITE);
 #else
-    /* memalign and getpagesize certainly need a Makefile.PL/configure check */
-    code = (char*)memalign(getpagesize(), size*sizeof(char));
-    /* amd64/linux disallows mprotect'ing an unaligned heap.
-       We NEED to start it in a fresh new page. */
-    /*code = (char*)malloc(size);*/
+  /* amd64/linux+bsd disallow mprotect'ing an unaligned heap.
+     We NEED to start it in a fresh new page. */
+# ifdef HAS_GETPAGESIZE
+    pagesize = getpagesize();
+# endif
+# ifdef HAVE_MEMALIGN
+    code = (char*)memalign(pagesize, size*sizeof(char));
+# else
+#  ifdef HAVE_POSIX_MEMALIGN
+    code = (char*)posix_memalign(pagesize, size*sizeof(char));
+#  else
+    code = (char*)malloc(size);
+#  endif
+# endif
 #endif
     code_sav = code;
 
@@ -653,7 +664,7 @@ Perl_runops_jit(pTHX)
     code = code_sav;
 #ifdef HAS_MPROTECT
     if (mprotect(code,size*sizeof(char),PROT_EXEC|PROT_READ|PROT_WRITE) < 0)
-	croak ("mprotect 0x%x for %u failed", code, size);
+	croak ("mprotect code=0x%x for size=%u failed", code, size);
 #endif
     /* XXX Missing. Prepare for execution: flush CPU cache. Needed only on ppc32 and ppc64 */
 
