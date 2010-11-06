@@ -66,8 +66,8 @@ T_CHARARR x86_epilog[] = {
 T_CHARARR x86_call[]  = {0xe8};      	/* call near offset $PL_op->op_ppaddr */
 T_CHARARR x86_jmp[]   = {0xff,0x25}; 	/* jmp *$PL_op->op_ppaddr */
 T_CHARARR x86_save_plop[]  = {
-    /*mov_eax_8ebp*/			/* &PL_op in -8(%ebp) */
-    mov_eax_rebx			/* &PL_op in %ebx */
+    mov_eax_8ebp			/* &PL_op in -8(%ebp) */
+    /*mov_eax_rebx*/			/* &PL_op in %ebx */
 };
 T_CHARARR x86_dispatch_getsig[] = {
     0x8b,0x0d		/* mov $PL_sig_pending,%ecx */

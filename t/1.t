@@ -5,6 +5,6 @@ $c .= " -Dv" if $Config{ccflags} =~ /-DDEBUGGING/;
 
 my $p = q( -e 'print q(ok);');
 print "# gdb --args $c $p\n";
-print "# (gdb) run; bt; b Jit.xs:628; run; disassemble runops_jit_0; stepi;\n";
+print "# (gdb) run; bt; b Perl_runops_jit; run; disassemble runops_jit_0; stepi;\n";
 print system(qq($c $p)) ? "not ok 1" : " 1";
 print "\n";

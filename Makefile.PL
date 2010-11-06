@@ -100,7 +100,7 @@ WriteMakefile
      },
     }
    ) : ()),
-  SIGN  => 1,
+  #SIGN  => 1,
   clean => { FILES =>
  	       "*.core *.stackdump a.out *.exe *.dis *.s *.i *.obj *.o ".
                "*.pdb *~ dll.base dll.exp *.err *.bak"

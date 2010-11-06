@@ -133,8 +133,8 @@ T_CHARARR NOP[]      = {0x90};    /* nop */
 #define push_esi	0x56
 #define push_ebx 	0x53
 #define push_ecx	0x51
-#define sub_x_esp(byte) 0x83,0x3c,byte
-#define mov_eax_rebx	0x89,0xc3	/* mov    %rax,(%rbx) &PL_op in ebx */
+#define sub_x_esp(byte) 0x83,0xec,byte
+#define mov_eax_rebx	0x89,0xc3	/* mov    %rax,(%rbx) &PL_op in ebx, XXX WRONG */
 /* mov    $memabs,(%ebx) &PL_op in ebx */
 #define mov_mem_rebx(m)	0xc7,0x03,(((unsigned int)m)&0xff),(((unsigned int)m)&0xff00),\
         		           (((unsigned int)m)&0xff0000),(((unsigned int)m)&0xff000000)
