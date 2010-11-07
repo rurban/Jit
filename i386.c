@@ -27,31 +27,31 @@ epilog:
 /* stack is already aligned */
 /* Usage: sizeof(PROLOG) + PUSHc(PROLOG) */
 
-T_CHARARR x86_prolog[] = {
-    push_ebp,		/* save frame pointer */	
-    mov_esp_ebp,	/* set new frame pointer */
-    push_ebx,		/* &PL_op  */
-    push_ecx,		/* &PL_sig_pending */
-    sub_x_esp(8),	/* room for 2 locals: &PL_sig_pending and op */
-    mov_mem_ebx(0)    	/* &PL_op to ebx */
 #ifdef HAVE_DISPATCH
-    ,mov_mem_4ebp(0)    /* &PL_sig_pending to -4(%ebp) */
-#endif
+#define X86_PROLOG(op, sig)                          \
+        push_ebp,	/* save frame pointer */ 	\
+        mov_esp_ebp,	/* set new frame pointer */	\
+        push_ebx,	/* &PL_op  */           	\
+        push_ecx,	/* &PL_sig_pending */           \
+        sub_x_esp(8),	/* room for 2 locals: &PL_sig_pending and op */ \
+        mov_mem_ebx(op), /* &PL_op to ebx */                            \
+    	mov_mem_4ebp(sig) /* &PL_sig_pending to -4(%ebp) */	\
 };
+#else
+#define X86_PROLOG(op, sig)                          \
+        push_ebp,	/* save frame pointer */ 	\
+        mov_esp_ebp,	/* set new frame pointer */	\
+        push_ebx,	/* &PL_op  */           	\
+        push_ecx,	/* &PL_sig_pending */           \
+        sub_x_esp(8),	/* room for 2 locals: &PL_sig_pending and op */ \
+        mov_mem_ebx(op), /* &PL_op to ebx */                            \
+};
+#endif
+
+T_CHARARR x86_prolog[] = { X86_PROLOG(0,0) };
 
 unsigned char * push_prolog(unsigned char *code) {
-    unsigned char prolog[] = {
-        push_ebp,
-        mov_esp_ebp,
-        push_ebx,	/* &PL_op */
-        push_ecx,	/* &PL_sig_pending */
-        sub_x_esp(8),
-        mov_mem_ebx(&PL_op)
-#ifdef HAVE_DISPATCH
-	,mov_mem_4ebp(&PL_sig_pending)
-#endif
- };
-    PUSHc(prolog);
+    PUSHc(X86_PROLOG(&PL_op, &PL_sig_pending));
     return code;
 }
 

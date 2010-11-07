@@ -142,6 +142,7 @@ T_CHARARR NOP[]      = {0x90};    /* nop */
 #define mov_mem_4ebp(m)	0xc7,0x45,0xfc,((((unsigned int)m)&0xff000000)>>24),((((unsigned int)m)&0xff0000)>>16), \
         ((((unsigned int)m)&0xff00)>>8),(((unsigned int)m)&0xff)
 #define mov_mem_recx 	0x8b,0x0d
+#define mov_rebp_ebx(byte) 0x8b,0x5d,byte  /* mov 0x8(%ebp),%ebx*/
 
 /* EPILOG */
 #define add_x_esp(byte) 0x83,0xc4,byte	/* add    $0x4,%esp */
