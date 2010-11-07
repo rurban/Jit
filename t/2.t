@@ -6,4 +6,4 @@ my $c = qq($^X -Mblib -MJit);
 $p = q( -e 'sub f{die "ok 1"}; f; print "not ok 1"');
 print "# gdb --args $c $p\n";
 system(qq($c $p));
-print " #TODO no optree for sub\n";
+#print " #TODO no optree for sub\n";

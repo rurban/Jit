@@ -93,13 +93,13 @@ T_CHARARR x86thr_dispatch_post[] = {
 };
 
 T_CHARARR maybranch_plop[] = {
-    mov_mem_rebx(0),
+    mov_mem_ebx(0),
     mov_eax_8ebp
 };
 unsigned char *
 push_maybranch_plop(unsigned char *code) {
     unsigned char maybranch_plop[] = {
-	mov_mem_rebx(&PL_op),
+	mov_mem_ebx(&PL_op),
 	mov_eax_8ebp};
     PUSHc(maybranch_plop);
     return code;

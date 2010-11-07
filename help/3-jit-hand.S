@@ -12,7 +12,7 @@ prolog:
         pushl 	%ebx
 	pushl	%ecx
 	subl	$8, %esp
-	movl	$_PL_op, (%ebx)
+	movl	$_PL_op, %ebx
 	movl	$_Perl_Isig_pending_ptr, -4(%ebp)
 loop:           
 	call	_Perl_pp_enter

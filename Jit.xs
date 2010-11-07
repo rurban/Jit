@@ -54,7 +54,7 @@ unsigned char *push_prolog(unsigned char *code);
 #endif
 
 #ifdef DEBUGGING
-# define JIT_CHAIN(op, code, root) jit_chain(op, code, root, fh, stabs) 
+# define JIT_CHAIN(op, code, root) jit_chain(op, code, root, fh, stabs, &dispatch) 
 # define DEB_PRINT_LOC(loc) printf(loc" \t= 0x%x\n", loc)
 # if PERL_VERSION < 8
 #   define DEBUG_v(x) x
@@ -134,13 +134,13 @@ T_CHARARR NOP[]      = {0x90};    /* nop */
 #define push_ebx 	0x53
 #define push_ecx	0x51
 #define sub_x_esp(byte) 0x83,0xec,byte
-#define mov_eax_rebx	0x89,0xc3	/* mov    %rax,(%rbx) &PL_op in ebx, XXX WRONG */
-/* mov    $memabs,(%ebx) &PL_op in ebx */
-#define mov_mem_rebx(m)	0xc7,0x03,(((unsigned int)m)&0xff),(((unsigned int)m)&0xff00),\
-        		           (((unsigned int)m)&0xff0000),(((unsigned int)m)&0xff000000)
+#define mov_eax_rebx	0x89,0x03	/* mov    %rax,(%rbx) &PL_op in ebx */
+/* mov    $memabs,%ebx &PL_op in ebx */
+#define mov_mem_ebx(m)	0xbb,(((unsigned int)m)&0xff),((((unsigned int)m)&0xff00)>>8), \
+        ((((unsigned int)m)&0xff0000)>>16),((((unsigned int)m)&0xff000000)>>24)
 /* &PL_sig_pending in -4(%ebp) */
-#define mov_mem_4ebp(m)	0xc7,0x45,0xfc,(((unsigned int)m)&0xff000000),(((unsigned int)m)&0xff0000),\
-					(((unsigned int)m)&0xff00),(((unsigned int)m)&0xff)
+#define mov_mem_4ebp(m)	0xc7,0x45,0xfc,((((unsigned int)m)&0xff000000)>>24),((((unsigned int)m)&0xff0000)>>16), \
+        ((((unsigned int)m)&0xff00)>>8),(((unsigned int)m)&0xff)
 #define mov_mem_recx 	0x8b,0x0d
 
 /* EPILOG */
@@ -369,7 +369,7 @@ jit_chain(
 	  unsigned char *code, 
 	  unsigned char *root
 #ifdef DEBUGGING
-	  ,FILE *fh, FILE *stabs
+	  ,FILE *fh, FILE *stabs, int *dispatch
 #endif
 	  )
 {
@@ -383,6 +383,7 @@ jit_chain(
 	opname = PL_op_name[op->op_type];
     fprintf(fh, "/* block jit_chain op 0x%x pp_%s; */\n", op, opname);
 #endif
+
     do {
 #ifdef DEBUGGING
 	if (!dryrun) {
@@ -469,6 +470,8 @@ jit_chain(
 	} else {
 	    PUSHc(SAVE_PLOP);
 	}
+/* save_plop now without argument, via indirect registers */
+#if 0
 #if !defined(USE_ITHREADS)
 	if (dryrun) {
 	    size += MOV_SIZE;
@@ -481,10 +484,11 @@ jit_chain(
 #endif
 	}
 #endif
+#endif
 
 	if (DISPATCH_NEEDED(op)) {
-	    /*dispatch++;*/
 #ifdef DEBUGGING
+	    (*dispatch)++;
 	    if (!dryrun) {
 # ifdef USE_ITHREADS
 		fprintf(fh, "if (my_perl->Isig_pending)\n  Perl_despatch_signals(my_perl);\n");
@@ -552,6 +556,7 @@ Perl_runops_jit(pTHX)
 #ifdef DEBUGGING
     static int line = 0;
     static int global_loops = 0;
+    static int dispatch = 0;
     register int i;
     FILE *fh;
     char *opname;
@@ -560,7 +565,6 @@ Perl_runops_jit(pTHX)
 #endif
 #endif
     U32 rel; /* 4 byte int */
-    int dispatch = 0;
     unsigned char *code, *code_sav;
 #if !defined(MOV_REL) && !defined(USE_ITHREADS)
     void *PL_op_ptr = &PL_op;
@@ -679,7 +683,9 @@ Perl_runops_jit(pTHX)
     DEBUG_v( printf("\n# runops_jit_%d\n", global_loops-1) );
 #endif
 
+/*================= Jit.xs:686 runops_jit_0 == disassemble code code+40 =====*/
     (*((void (*)(pTHX))code))(aTHX);
+/*================= runops_jit =================================*/
 
     TAINT_NOT;
 #ifdef _WIN32

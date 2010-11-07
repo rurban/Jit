@@ -1,4 +1,11 @@
-v0.0302 2010-09-06 rurban
+v0.04 2010-11-07 rurban
+
+Fixed i386-nonthreaded: 
+  wrong mov %eax,(%ebx), 
+  mov $mem,%ebx (forgot shifting)
+  save_plop now without argument
+
+v0.0302 2010-11-06 rurban
 
 Added memalign, posix_memalign probes. Got failing reports for OpenBSD.
 

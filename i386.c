@@ -33,7 +33,7 @@ T_CHARARR x86_prolog[] = {
     push_ebx,		/* &PL_op  */
     push_ecx,		/* &PL_sig_pending */
     sub_x_esp(8),	/* room for 2 locals: &PL_sig_pending and op */
-    mov_mem_rebx(0)    	/* &PL_op to ebx */
+    mov_mem_ebx(0)    	/* &PL_op to ebx */
 #ifdef HAVE_DISPATCH
     ,mov_mem_4ebp(0)    /* &PL_sig_pending to -4(%ebp) */
 #endif
@@ -46,7 +46,7 @@ unsigned char * push_prolog(unsigned char *code) {
         push_ebx,	/* &PL_op */
         push_ecx,	/* &PL_sig_pending */
         sub_x_esp(8),
-        mov_mem_rebx(&PL_op)
+        mov_mem_ebx(&PL_op)
 #ifdef HAVE_DISPATCH
 	,mov_mem_4ebp(&PL_sig_pending)
 #endif
@@ -66,8 +66,8 @@ T_CHARARR x86_epilog[] = {
 T_CHARARR x86_call[]  = {0xe8};      	/* call near offset $PL_op->op_ppaddr */
 T_CHARARR x86_jmp[]   = {0xff,0x25}; 	/* jmp *$PL_op->op_ppaddr */
 T_CHARARR x86_save_plop[]  = {
-    mov_eax_8ebp			/* &PL_op in -8(%ebp) */
-    /*mov_eax_rebx*/			/* &PL_op in %ebx */
+    /*mov_eax_8ebp*/			/* &PL_op in -8(%ebp) */
+    mov_eax_rebx			/* &PL_op in %ebx */
 };
 T_CHARARR x86_dispatch_getsig[] = {
     0x8b,0x0d		/* mov $PL_sig_pending,%ecx */
@@ -80,13 +80,13 @@ T_CHARARR x86_dispatch[] = {
 T_CHARARR x86_dispatch_post[] = {}; /* fails with msvc */
 
 T_CHARARR maybranch_plop[] = {
-    mov_mem_rebx(0),
+    mov_mem_ebx(0),
     mov_eax_8ebp
 };
 unsigned char *
 push_maybranch_plop(unsigned char *code) {
     unsigned char maybranch_plop[] = {
-	mov_mem_rebx(&PL_op),
+	mov_mem_ebx(&PL_op),
 	mov_eax_8ebp};
     PUSHc(maybranch_plop);
     return code;
