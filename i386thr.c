@@ -106,13 +106,12 @@ push_maybranch_plop(unsigned char *code) {
     return code;
 }
 T_CHARARR gotorel[] = {
-	jmp(0),
+	jmp(0)
 };
 unsigned char *
 push_gotorel(unsigned char *code, int label) {
     unsigned char gotorel[] = {
-	jmp(label)
-    };
+	jmp(label)};
     PUSHc(gotorel);
     return code;
 }
@@ -125,6 +124,8 @@ push_gotorel(unsigned char *code, int label) {
 # define DISPATCH       x86thr_dispatch
 # define DISPATCH_POST  x86thr_dispatch_post
 # define EPILOG         x86thr_epilog
+# define MAYBRANCH_PLOP maybranch_plop
+# define GOTOREL        gotorel
 
 /*
  * Local variables:

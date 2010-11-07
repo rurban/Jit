@@ -120,6 +120,16 @@ unsigned char *push_maybranch_plop(unsigned char *code) {
     PUSHc(maybranch_plop2);
     return code;
 }
+T_CHARARR gotorel[] = {
+	jmp(0)
+};
+unsigned char *
+push_gotorel(unsigned char *code, int label) {
+    unsigned char gotorel[] = {
+	jmp(label)};
+    PUSHc(gotorel);
+    return code;
+}
 
 # define PROLOG 	amd64_prolog
 # define CALL	 	amd64_call
@@ -131,6 +141,7 @@ unsigned char *push_maybranch_plop(unsigned char *code) {
 # define DISPATCH_POST  amd64_dispatch_post
 # define EPILOG         amd64_epilog
 # define MAYBRANCH_PLOP maybranch_plop
+# define GOTOREL        gotorel
 
 /*
  * Local variables:

@@ -231,7 +231,7 @@ T_CHARARR NOP[]      = {0x90};    /* nop */
 
 #define call 		0xe8	    /* + 4 rel */
 #define ljmp(abs) 	0xff,0x25   /* + 4 memabs */
-#define jmp(byte)       0x3b,(byte) /* maybranch */
+#define jmp(byte)       0x3b,(byte) /* maybranch, untested */
 /* mov    %rax,(%rbx) &PL_op in ebx */
 #define mov_rax_memr    0x48,0x89,0x05
 #define mov_eax_rebx    0x89,0x03
@@ -507,9 +507,9 @@ jit_chain(
 	    if ((PL_opargs[op->op_type] & OA_CLASS_MASK) == OA_LOGOP) {
 		/* TODO store and jump to labels */
                 if (dryrun) {
-                    size += sizeof(gotorel);
+                    size += sizeof(GOTOREL);
                     size += JIT_CHAIN(cLOGOPx(op)->op_other, NULL, NULL);
-                    size += sizeof(gotorel);
+                    size += sizeof(GOTOREL);
                 } else {
                     /* XXX TODO cmp returned op => je */
                     int next = JIT_CHAIN(cLOGOPx(op)->op_other, NULL, NULL);

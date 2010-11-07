@@ -93,13 +93,12 @@ push_maybranch_plop(unsigned char *code) {
     return code;
 }
 T_CHARARR gotorel[] = {
-	jmp(0),
+	jmp(0)
 };
 unsigned char *
 push_gotorel(unsigned char *code, int label) {
     unsigned char gotorel[] = {
-	jmp(label),
-    }
+	jmp(label)};
     PUSHc(gotorel);
     return code;
 }
@@ -113,6 +112,8 @@ push_gotorel(unsigned char *code, int label) {
 # define DISPATCH_GETSIG x86_dispatch_getsig
 # define DISPATCH       x86_dispatch
 # define DISPATCH_POST  x86_dispatch_post
+# define MAYBRANCH_PLOP maybranch_plop
+# define GOTOREL        gotorel
 
 
 /*
