@@ -37,6 +37,12 @@
 int dispatch_needed(OP* op);
 int maybranch(OP* op);
 unsigned char *push_prolog(unsigned char *code);
+int jit_chain(OP* op, unsigned char *code, unsigned char *root
+#ifdef DEBUGGING
+              ,FILE *fh, FILE *stabs
+#endif
+              );
+
 
 /* When do we need PERL_ASYNC_CHECK?
  * Until 5.13.2 we had it after each and every op,
@@ -54,7 +60,7 @@ unsigned char *push_prolog(unsigned char *code);
 #endif
 
 #ifdef DEBUGGING
-# define JIT_CHAIN(op, code, root) jit_chain(op, code, root, fh, stabs, &dispatch) 
+# define JIT_CHAIN(op, code, root) jit_chain(op, code, root, fh, stabs)
 # define DEB_PRINT_LOC(loc) printf(loc" \t= 0x%x\n", loc)
 # if PERL_VERSION < 8
 #   define DEBUG_v(x) x
@@ -372,7 +378,7 @@ jit_chain(
 	  unsigned char *code, 
 	  unsigned char *root
 #ifdef DEBUGGING
-	  ,FILE *fh, FILE *stabs, int *dispatch
+	  ,FILE *fh, FILE *stabs
 #endif
 	  )
 {
@@ -383,7 +389,7 @@ jit_chain(
     char *opname;
 
     if (!dryrun) {
-	opname = PL_op_name[op->op_type];
+	opname = (char*)PL_op_name[op->op_type];
         fprintf(fh, "/* block jit_chain op 0x%x pp_%s; */\n", op, opname);
     }
 #endif
@@ -391,7 +397,7 @@ jit_chain(
     do {
 #ifdef DEBUGGING
 	if (!dryrun) {
-	    opname = PL_op_name[op->op_type];
+	    opname = (char*)PL_op_name[op->op_type];
 	    DEBUG_v( printf("#pp_%s \t= 0x%x\n", opname, op->op_ppaddr));
 	}
 #endif
@@ -445,7 +451,6 @@ jit_chain(
 
 	if (DISPATCH_NEEDED(op)) {
 #ifdef DEBUGGING
-	    (*dispatch)++;
 	    if (!dryrun) {
 # ifdef USE_ITHREADS
 		fprintf(fh, "if (my_perl->Isig_pending)\n  Perl_despatch_signals(my_perl);\n");
@@ -509,7 +514,7 @@ jit_chain(
                     /* XXX TODO cmp returned op => je */
                     int next = JIT_CHAIN(cLOGOPx(op)->op_other, NULL, NULL);
                     code = push_gotorel(code, next);
-                    code = JIT_CHAIN(cLOGOPx(op)->op_other, code, root);
+                    code = (unsigned char*)JIT_CHAIN(cLOGOPx(op)->op_other, code, root);
                     next = JIT_CHAIN(cLOGOPx(op)->op_next, NULL, NULL);
                     code = push_gotorel(code, (int)code+next);
                 }
@@ -531,9 +536,9 @@ jit_chain(
                     if (!dryrun) {
                         label = JIT_CHAIN(cLOOPx(op)->op_nextop, code, root);
                         size += label-(int)code;
-                        label = JIT_CHAIN(cLOOPx(op)->op_lastop, label, root);
+                        label = JIT_CHAIN(cLOOPx(op)->op_lastop, (char*)label, root);
                         size += label-(int)code;
-                        label = JIT_CHAIN(cLOOPx(op)->op_redoop, label, root);
+                        label = JIT_CHAIN(cLOOPx(op)->op_redoop, (char*)label, root);
                         size += label-(int)code;
                     }
 		    break;
@@ -585,7 +590,6 @@ Perl_runops_jit(pTHX)
 #ifdef DEBUGGING
     static int line = 0;
     static int global_loops = 0;
-    static int dispatch = 0;
     register int i;
     FILE *fh;
     char *opname;
