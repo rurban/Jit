@@ -92,6 +92,7 @@ T_CHARARR x86thr_dispatch_post[] = {
     0x53,0x90
 };
 
+/* XXX TODO */
 T_CHARARR maybranch_plop[] = {
     mov_mem_ebx(0),
     mov_eax_8ebp
@@ -102,6 +103,17 @@ push_maybranch_plop(unsigned char *code) {
 	mov_mem_ebx(&PL_op),
 	mov_eax_8ebp};
     PUSHc(maybranch_plop);
+    return code;
+}
+T_CHARARR gotorel[] = {
+	jmp(0),
+};
+unsigned char *
+push_gotorel(unsigned char *code, int label) {
+    unsigned char gotorel[] = {
+	jmp(label)
+    };
+    PUSHc(gotorel);
     return code;
 }
 

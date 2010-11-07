@@ -162,11 +162,12 @@ T_CHARARR NOP[]      = {0x90};    /* nop */
 #define call 		0xe8	    /* + 4 rel */
 #define ljmp(abs) 	0xff,0x25   /* + 4 memabs */
 #define mov_eax_mem 	0xa3	    /* + 4 memabs */
+#define jmp(byte)       0x3b,(byte) /* maybranch */
 
 #define mov_4ebp_edx    0x8b,0x55,0xfc
 #define mov_redx_eax    0x82,0x02
 #define test_eax_eax    0x85,0xc0
-#define je(byte)        0x74,byte
+#define je(byte)        0x74,(byte)
 /* skip call	_Perl_despatch_signals */
 #define je_5            0x74,0x05
 
@@ -224,13 +225,14 @@ T_CHARARR NOP[]      = {0x90};    /* nop */
 
 #define call 		0xe8	    /* + 4 rel */
 #define ljmp(abs) 	0xff,0x25   /* + 4 memabs */
+#define jmp(byte)       0x3b,(byte) /* maybranch */
 /* mov    %rax,(%rbx) &PL_op in ebx */
 #define mov_rax_memr    0x48,0x89,0x05
 #define mov_eax_rebx    0x89,0x03
 #define mov_4ebp_edx    0x8b,0x55,0xfc
 #define mov_redx_eax    0x82,0x02
 #define test_eax_eax    0x85,0xc0
-#define je(byte)        0x74,byte
+#define je(byte)        0x74,(byte)
 /* skip call	_Perl_despatch_signals */
 #define je_5            0x74,0x05
 
@@ -380,9 +382,10 @@ jit_chain(
     static int line = 0;
     char *opname;
 
-    if (!dryrun)
+    if (!dryrun) {
 	opname = PL_op_name[op->op_type];
-    fprintf(fh, "/* block jit_chain op 0x%x pp_%s; */\n", op, opname);
+        fprintf(fh, "/* block jit_chain op 0x%x pp_%s; */\n", op, opname);
+    }
 #endif
 
     do {
@@ -399,53 +402,6 @@ jit_chain(
 		    ++line, code-root, opname);
 	}
 # endif
-	if (maybranch(op)) {
-	    if (dryrun) {
-		size += sizeof(maybranch_plop);
-		size += sizeof(CALL); size += CALL_SIZE;
-	    } else {
-		code = push_maybranch_plop(code);
-		code = CALL_ABS(op->op_ppaddr);
-	    }
-	    if ((PL_opargs[op->op_type] & OA_CLASS_MASK) == OA_LOGOP) {
-		/* TODO store and jump to labels */
-		int label = JIT_CHAIN(cLOGOPx(op)->op_other, code, root);
-		size += label-(int)code;
-	    } else {
-		int next, label;
-		/* need to check the returned op at runtime? we'd need an indirect call then.
-		*/
-		switch (op->op_type) { 	/* sync this list with B::CC */
-		case OP_FLIP:
-		    if ((op->op_flags & OPf_WANT) == OPf_WANT_LIST) {
-			label = JIT_CHAIN(cLOGOPx(cUNOPx(op)->op_first)->op_other, code, root);
-			size += label-(int)code;
-		    }
-		    break;
-		case OP_ENTERLOOP:
-		case OP_ENTERITER:
-		    JIT_CHAIN(cLOOPx(op)->op_nextop, code, root);
-		    JIT_CHAIN(cLOOPx(op)->op_lastop, code, root);
-		    JIT_CHAIN(cLOOPx(op)->op_redoop, code, root);
-		    break;
-		case OP_SUBSTCONT:
-		    next = JIT_CHAIN(cLOGOPx(op)->op_other, code, root);
-		    size += next-(int)code;
-#if PERL_VERSION > 8
-# define PMREPLSTART(op) (op)->op_pmstashstartu.op_pmreplstart
-#else
-# define PMREPLSTART(op) (op)->op_pmreplstart
-#endif
-		    label = JIT_CHAIN(PMREPLSTART(cPMOPx(op)), code, root);
-		    size += label-(int)code;
-		    /* TODO runtime check: goto label, else return next->next */
-		case OP_GOTO:
-		    /* TODO runtime check: goto label */
-		default:
-		    warn("unsupport branch for %s", PL_op_name[op->op_type]);
-		}
-	    }
-	}
 	
 	if (!dryrun) {
 #ifdef DEBUGGING
@@ -531,7 +487,79 @@ jit_chain(
 	    }
 # endif
 #endif
+        }
+
+        /* other before next */
+	if (maybranch(op)) {
+            int label;
+	    if (dryrun) {
+		size += sizeof(maybranch_plop);
+		size += sizeof(CALL); size += CALL_SIZE;
+	    } else {
+		code = push_maybranch_plop(code);
+		code = CALL_ABS(op->op_ppaddr);
+	    }
+	    if ((PL_opargs[op->op_type] & OA_CLASS_MASK) == OA_LOGOP) {
+		/* TODO store and jump to labels */
+                if (dryrun) {
+                    size += sizeof(gotorel);
+                    size += JIT_CHAIN(cLOGOPx(op)->op_other, NULL, NULL);
+                    size += sizeof(gotorel);
+                } else {
+                    /* XXX TODO cmp returned op => je */
+                    int next = JIT_CHAIN(cLOGOPx(op)->op_other, NULL, NULL);
+                    code = push_gotorel(code, next);
+                    code = JIT_CHAIN(cLOGOPx(op)->op_other, code, root);
+                    next = JIT_CHAIN(cLOGOPx(op)->op_next, NULL, NULL);
+                    code = push_gotorel(code, (int)code+next);
+                }
+	    } else {
+		int next, label;
+		/* need to check the returned op at runtime? we'd need an indirect call then. */
+		switch (op->op_type) { 	/* sync this list with B::CC */
+		case OP_FLIP:
+		    if ((op->op_flags & OPf_WANT) == OPf_WANT_LIST) {
+                        if (!dryrun) {
+                            label = JIT_CHAIN(cLOGOPx(cUNOPx(op)->op_first)->op_other, code, root);
+                            size += label-(int)code;
+                            code = (unsigned char *)label;
+                        }
+		    }
+		    break;
+		case OP_ENTERLOOP:
+		case OP_ENTERITER:
+                    if (!dryrun) {
+                        label = JIT_CHAIN(cLOOPx(op)->op_nextop, code, root);
+                        size += label-(int)code;
+                        label = JIT_CHAIN(cLOOPx(op)->op_lastop, label, root);
+                        size += label-(int)code;
+                        label = JIT_CHAIN(cLOOPx(op)->op_redoop, label, root);
+                        size += label-(int)code;
+                    }
+		    break;
+		case OP_SUBSTCONT:
+                    if (!dryrun) {
+                        next = JIT_CHAIN(cLOGOPx(op)->op_other, code, root);
+                        size += next-(int)code;
+                    }
+#if PERL_VERSION > 8
+# define PMREPLSTART(op) (op)->op_pmstashstartu.op_pmreplstart
+#else
+# define PMREPLSTART(op) (op)->op_pmreplstart
+#endif
+                    if (!dryrun) {
+                        label = JIT_CHAIN(PMREPLSTART(cPMOPx(op)), code, root);
+                        size += label-(int)code;
+                    }
+		    /* TODO runtime check: goto label, else return next->next */
+		case OP_GOTO:
+		    /* TODO runtime check: goto label */
+		default:
+		    warn("unsupport branch for %s", PL_op_name[op->op_type]);
+		}
+	    }
 	}
+
     } while (op = op->op_next);
     return dryrun ? size : (int)code;
 }

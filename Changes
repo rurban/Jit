@@ -1,11 +1,10 @@
 v0.04 2010-11-07 rurban
 
-Fixed i386
+Fixed i386 1.t + 2.t, threaded and non-threaded
   wrong mov %eax,(%ebx), 
   mov $mem,%ebx (forgot shifting)
   save_plop now without argument
-  better PROLOG macros
-t/3.t maybranch fail threaded
+t/3.t maybranch still fails
 
 v0.0302 2010-11-06 rurban
 

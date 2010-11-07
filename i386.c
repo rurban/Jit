@@ -27,31 +27,31 @@ epilog:
 /* stack is already aligned */
 /* Usage: sizeof(PROLOG) + PUSHc(PROLOG) */
 
+T_CHARARR x86_prolog[] = {
+    push_ebp,		/* save frame pointer */	
+    mov_esp_ebp,	/* set new frame pointer */
+    push_ebx,		/* &PL_op  */
+    push_ecx,		/* &PL_sig_pending */
+    sub_x_esp(8),	/* room for 2 locals: &PL_sig_pending and op */
+    mov_mem_ebx(0)    	/* &PL_op to ebx */
 #ifdef HAVE_DISPATCH
-#define X86_PROLOG(op, sig)                          \
-        push_ebp,	/* save frame pointer */ 	\
-        mov_esp_ebp,	/* set new frame pointer */	\
-        push_ebx,	/* &PL_op  */           	\
-        push_ecx,	/* &PL_sig_pending */           \
-        sub_x_esp(8),	/* room for 2 locals: &PL_sig_pending and op */ \
-        mov_mem_ebx(op), /* &PL_op to ebx */                            \
-    	mov_mem_4ebp(sig) /* &PL_sig_pending to -4(%ebp) */	\
-};
-#else
-#define X86_PROLOG(op, sig)                          \
-        push_ebp,	/* save frame pointer */ 	\
-        mov_esp_ebp,	/* set new frame pointer */	\
-        push_ebx,	/* &PL_op  */           	\
-        push_ecx,	/* &PL_sig_pending */           \
-        sub_x_esp(8),	/* room for 2 locals: &PL_sig_pending and op */ \
-        mov_mem_ebx(op), /* &PL_op to ebx */                            \
-};
+    ,mov_mem_4ebp(0)    /* &PL_sig_pending to -4(%ebp) */
 #endif
-
-T_CHARARR x86_prolog[] = { X86_PROLOG(0,0) };
+};
 
 unsigned char * push_prolog(unsigned char *code) {
-    PUSHc(X86_PROLOG(&PL_op, &PL_sig_pending));
+    unsigned char prolog[] = {
+        push_ebp,
+        mov_esp_ebp,
+        push_ebx,	/* &PL_op */
+        push_ecx,	/* &PL_sig_pending */
+        sub_x_esp(8),
+        mov_mem_ebx(&PL_op)
+#ifdef HAVE_DISPATCH
+	,mov_mem_4ebp(&PL_sig_pending)
+#endif
+ };
+    PUSHc(prolog);
     return code;
 }
 
@@ -79,6 +79,7 @@ T_CHARARR x86_dispatch[] = {
 /* &Perl_despatch_signals relative */
 T_CHARARR x86_dispatch_post[] = {}; /* fails with msvc */
 
+/* XXX TODO */
 T_CHARARR maybranch_plop[] = {
     mov_mem_ebx(0),
     mov_eax_8ebp
@@ -89,6 +90,17 @@ push_maybranch_plop(unsigned char *code) {
 	mov_mem_ebx(&PL_op),
 	mov_eax_8ebp};
     PUSHc(maybranch_plop);
+    return code;
+}
+T_CHARARR gotorel[] = {
+	jmp(0),
+};
+unsigned char *
+push_gotorel(unsigned char *code, int label) {
+    unsigned char gotorel[] = {
+	jmp(label),
+    }
+    PUSHc(gotorel);
     return code;
 }
 
