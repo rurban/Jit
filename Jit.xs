@@ -3,7 +3,7 @@
  *    JIT (Just-in-time compile) the Perl5 runloop.
  *    Currently for x86 32bit, amd64 64bit. More CPU's later.
  *    Status:
- *      Works only for simple i386 and amd64 unthreaded, 
+ *      Works only for simple i386 and amd64, 
  *      without PERL_ASYNC_CHECK
  *      without maybranch ops (return op_other, op_last, ... ignored)
  *
