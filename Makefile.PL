@@ -91,6 +91,7 @@ WriteMakefile
     'sigtrap' => 1.00,
   },
   'AUTHOR'   => 'Reini Urban <perl-compiler@googlegroups.com>',
+  'ABSTRACT' => 'Jit the perl5 runloop in proper execution order and near calls',
   ($ExtUtils::MakeMaker::VERSION gt '6.46' ?
    ('META_MERGE'  => {
      resources =>

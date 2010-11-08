@@ -1,6 +1,8 @@
 amd64.c
 amd64thr.c
+Artistic
 Changes
+Copying
 disfunc
 .gdbinit
 help/3-jit.c

@@ -17,17 +17,20 @@ Jit->bootstrap($VERSION);
 
 =head NAME
 
-Jit the perl5 runops loop in proper execution order
+Jit the perl5 runloop in proper execution order and near calls.
 
 =head DESCRIPTION
 
 It does only work yet for simple functions! No subs, no branches.
-Only i386 and amd64 yet.
+Only intel (i386 and amd64) yet.
 
-This perl5 jitter is super-simple. The compiled optree is a linked
-list in memory in non-execution order, wide-spread jumps.
-Additionally the calls are indirect. The jitter properly aligns
-the run-time calls in linear linked-list "exec" order, so that
+This perl5 jitter is super-simple. The compiled optree from
+the perl5 parser is a linked list in memory in non-execution
+order, with wide-spread jumps, almost in reverse order.
+
+Additionally the calls are indirect.
+
+The jitter properly aligns the run-time calls in linear "exec" order, so that
 the CPU can prefetch the next (and other) instructions.
 
 The old indirect call far costs about 70 cycles,
@@ -38,6 +41,17 @@ Speed up:
 
 Additional memory costs:
   TODO
+
+=head1 AUTHOR
+
+Reini Urban C<perl-compiler@googlegroups.com> written from scratch.
+
+=head1 LICENSE
+
+Copyright (c) 2010 Reini Urban
+
+You may distribute under the terms of either the GNU General Public
+License or the Artistic License, as specified in the README file.
 
 =cut
 
