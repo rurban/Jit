@@ -145,8 +145,8 @@ T_CHARARR NOP[]      = {0x90};    /* nop */
 #define mov_mem_ebx(m)	0xbb,(((unsigned int)m)&0xff),((((unsigned int)m)&0xff00)>>8), \
         ((((unsigned int)m)&0xff0000)>>16),((((unsigned int)m)&0xff000000)>>24)
 /* &PL_sig_pending in -4(%ebp) */
-#define mov_mem_4ebp(m)	0xc7,0x45,0xfc,((((unsigned int)m)&0xff000000)>>24),((((unsigned int)m)&0xff0000)>>16), \
-        ((((unsigned int)m)&0xff00)>>8),(((unsigned int)m)&0xff)
+#define mov_mem_4ebp(m)	0xc7,0x45,0xfc,((((unsigned int)m)&0xff000000)>>24), \
+        ((((unsigned int)m)&0xff0000)>>16),((((unsigned int)m)&0xff00)>>8),(((unsigned int)m)&0xff)
 #define mov_mem_recx 	0x8b,0x0d
 #define mov_rebp_ebx(byte) 0x8b,0x5d,byte  /* mov 0x8(%ebp),%ebx*/
 
@@ -234,7 +234,7 @@ T_CHARARR NOP[]      = {0x90};    /* nop */
 #define jmp(byte)       0x3b,(byte) /* maybranch, untested */
 /* mov    %rax,(%rbx) &PL_op in ebx */
 #define mov_rax_memr    0x48,0x89,0x05
-#define mov_eax_rebx    0x89,0x03
+#define mov_eax_rebx    0x49,0x89,0x03
 #define mov_4ebp_edx    0x8b,0x55,0xfc
 #define mov_redx_eax    0x82,0x02
 #define test_eax_eax    0x85,0xc0
