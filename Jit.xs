@@ -272,6 +272,28 @@ void f_PUSHmov(unsigned char* code, void *where) {
 
 /**********************************************************************************/
 
+#ifdef PROFILING
+#define NV_1E6 1000000.0
+#ifdef WIN32
+# include <time.h>
+#else
+# include <sys/time.h>
+#endif
+NV
+mytime() {
+    struct timeval Tp;
+    struct timezone Tz;
+    int status;
+    status = gettimeofday (&Tp, &Tz);
+    if (status == 0) {
+        Tp.tv_sec += Tz.tz_minuteswest * 60;	/* adjust for TZ */
+        return Tp.tv_sec + (Tp.tv_usec / NV_1E6);
+    } else {
+        return -1.0;
+    }
+}
+#endif
+
 int
 dispatch_needed(OP* op) {
 #ifdef BYPASS_DISPATCH_NEEDED
@@ -604,6 +626,15 @@ Perl_runops_jit(pTHX)
 #endif
     OP * root;
     int pagesize = 4096, size = 0;
+#ifdef PROFILING
+    SV *sv_prof;
+    int profiling = 1;
+    NV bench;
+    sv_prof = get_sv("Jit::_profiling", 0);
+    if (sv_prof) {
+        profiling = SvIV_nomg(sv_prof);
+    }
+#endif
 
     /* quirky pass 1: need size to allocate code.
        PL_slab_count should be near the optree size, but our method is safe.
@@ -623,6 +654,11 @@ Perl_runops_jit(pTHX)
     line += 2;
 #endif
     root = PL_op;
+#ifdef PROFILING
+    if (profiling) {
+        bench = mytime();
+    }
+#endif
     size = 0;
     size += sizeof(PROLOG);
     size += JIT_CHAIN(PL_op, NULL, NULL);
@@ -668,6 +704,12 @@ Perl_runops_jit(pTHX)
 # endif
     fprintf(stabs, ".stabn 68,0,%d,0\n", line);
     global_loops++;
+#endif
+#ifdef PROFILING
+    if (profiling) {
+        printf("jit pass 1:\t%0.12f\n", mytime() - bench);
+        bench = mytime();
+    }
 #endif
 
     /* pass 2: jit */
@@ -715,10 +757,22 @@ Perl_runops_jit(pTHX)
     }
     DEBUG_v( printf("\n# runops_jit_%d\n", global_loops-1) );
 #endif
+#ifdef PROFILING
+    if (profiling) {
+        printf("jit pass 2:\t%0.12f\n", mytime() - bench);
+        bench = mytime();
+    }
+#endif
 
 /*================= Jit.xs:686 runops_jit_0 == disassemble code code+40 =====*/
     (*((void (*)(pTHX))code))(aTHX);
 /*================= runops_jit =================================*/
+#ifdef PROFILING
+    if (profiling) {
+        printf("jit runloop:\t%0.12f\n", mytime() - bench);
+        bench = mytime();
+    }
+#endif
 
     TAINT_NOT;
 #ifdef _WIN32
@@ -726,6 +780,17 @@ Perl_runops_jit(pTHX)
 #else
     free(code);
 #endif
+
+#ifdef PROFILING
+    if (profiling) {
+        PL_op = root;
+        register OP *op = PL_op;
+        while ((PL_op = op = op->op_ppaddr(aTHX))) {
+        }
+        printf("unjit runloop:\t%0.12f\n", mytime() - bench);
+    }
+#endif
+
     return 0;
 }
 
