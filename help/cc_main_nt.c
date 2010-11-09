@@ -17,9 +17,9 @@ static OP * pp_main()
     register int *plop = &PL_op;
     register int *p = &PL_sig_pending;
 
-    PL_op = Perl_pp_enter();
+    *plop = Perl_pp_enter();
     PL_op = Perl_pp_nextstate();
-    PL_op = Perl_pp_const();
+    *plop = Perl_pp_const();
     PL_op = Perl_pp_padsv();
     PL_op = Perl_pp_sassign();
     PL_op = Perl_pp_nextstate();

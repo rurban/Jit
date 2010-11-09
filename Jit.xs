@@ -210,10 +210,14 @@ T_CHARARR NOP[]      = {0x90};    /* nop */
 #define add_x_esp(byte) 0x48,0x83,0xc4,byte
 #define fourbyte        0x00,0x00,0x00,0x00
 /* mov    $memabs,(%ebx) &PL_op in ebx */
-#define mov_mem_rebx    0x48,0x89,0x1d /* &PL_op */
-#define mov_mem_recx	0x48,0x89,0x1e /* &PL_sig_pending */
+#define mov_mem_rbx     0x48,0x8b,0x1d /* mov &PL_op,%rbx */
+#define mov_mem_ecx	0x8b,0x0d      /* &PL_sig_pending */
+
+#define mov_rebx_mem    0x48,0x89,0x1d /* movq (%ebx), &PL_op */
+#define mov_mem_rebx	0x48,0xc7,0x03 /* movq &PL_op, (%ebx) */
+#define mov_eax_rebx	0x89,0x03      /* movq %rax,(%rbx) &PL_op in ebx */
 /* &PL_op in -4(%ebp) */
-#define mov_mem_4ebp	0xc7,0x45,0xfc
+/* #define mov_mem_4ebp	0xc7,0x45,0xfc */
 #define mov_eax_4ebp 	0x89,0x45,0xfc
 
 /* EPILOG */
@@ -233,9 +237,11 @@ T_CHARARR NOP[]      = {0x90};    /* nop */
 #define ljmp(abs) 	0xff,0x25   /* + 4 memabs */
 #define jmp(byte)       0x3b,(byte) /* maybranch, untested */
 /* mov    %rax,(%rbx) &PL_op in ebx */
-#define mov_rax_memr    0x48,0x89,0x05
-#define mov_eax_rebx    0x49,0x89,0x03
+#define mov_rax_memr    0x48,0x89,0x05 /* + 4 rel */
+#define mov_eax_rebx    0x89,0x03
+
 #define mov_4ebp_edx    0x8b,0x55,0xfc
+#define mov_reax_ebx    0x48,0x8b,0x18
 #define mov_redx_eax    0x82,0x02
 #define test_eax_eax    0x85,0xc0
 #define je(byte)        0x74,(byte)
@@ -455,21 +461,6 @@ jit_chain(
 	} else {
 	    PUSHc(SAVE_PLOP);
 	}
-/* save_plop now without argument, via indirect registers */
-#if 0
-#if !defined(USE_ITHREADS)
-	if (dryrun) {
-	    size += MOV_SIZE;
-	} else {
-#ifdef MOV_REL
-	    PUSHmov(&op);
-#else
-	    OP *op_ptr = &op;
-	    PUSHmov(&op_ptr);
-#endif
-	}
-#endif
-#endif
 
 	if (DISPATCH_NEEDED(op)) {
 #ifdef DEBUGGING

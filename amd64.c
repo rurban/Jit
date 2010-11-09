@@ -36,55 +36,72 @@ L2:
   5b                   	pop    %rbx
   c9                   	leaveq 
   c3                   	retq   
+
+Dump of assembler code from 0x1127000 to 0x1127058:
+0x0000000001127000:     push   %rbp
+0x0000000001127001:     mov    %rsp,%rbp
+0x0000000001127004:     sub    $0x8,%rsp
+0x0000000001127008:     push   %rbx
+0x0000000001127009:     mov    -0x8963b0(%rip),%rbx        # 0x890c60 <PL_op>
+0x0000000001127010:     push   %rcx
+0x0000000001127011:     mov    -0x8969f3(%rip),%ecx        # 0x890624 <PL_sig_pending>
+0x0000000001127017:     callq  0x4ce3f0 <Perl_pp_enter>
+0x000000000112701c:     mov    %eax,(%rbx)
+0x000000000112701e:     callq  0x4d18a0 <Perl_pp_nextstate>
+0x0000000001127023:     mov    %eax,(%rbx)
+0x0000000001127025:     callq  0x4d5e20 <Perl_pp_pushmark>
+0x000000000112702a:     mov    %eax,(%rbx)
+0x000000000112702c:     callq  0x4cb010 <Perl_pp_const>
+0x0000000001127031:     mov    %eax,(%rbx)
+0x0000000001127033:     callq  0x4da5f0 <Perl_pp_print>
+0x0000000001127038:     mov    %eax,(%rbx)
+0x000000000112703a:     callq  0x4cfc90 <Perl_pp_leave>
+0x000000000112703f:     mov    %eax,(%rbx)
+0x0000000001127041:     pop    %rcx
+0x0000000001127042:     pop    %rbx
+0x0000000001127043:     add    $0x8,%rsp
+0x0000000001127047:     leaveq
+0x0000000001127048:     retq
+
 */
 
 T_CHARARR amd64_prolog[] = {
     push_rbp,
     mov_rsp_rbp,
     sub_x_rsp(8),
-    push_r12, 	/* for register OP* op */
-    push_rbx, 	/* for &PL_op */
-#ifdef HAVE_DISPATCH
-    push_rcx,
-    mov_mem_recx, fourbyte,
+    push_rbx, 		/* &PL_op */
+    mov_mem_rbx, fourbyte
+#ifdef HAVE_DISPATCH	/* &PL_sig_pending */
+    ,push_rcx,
+    mov_mem_ecx, fourbyte
 #endif
-    mov_mem_4ebp, fourbyte,
 };
+
 unsigned char *push_prolog(unsigned char *code) {
-    unsigned char p1[] = {
+    unsigned char prolog1[] = {
 	push_rbp,
 	mov_rsp_rbp,
-	push_r12
-#ifdef HAVE_DISPATCH
-	,push_rbx,
-	mov_mem_rebx
-#endif
+	sub_x_rsp(8),
+	push_rbx, 	/* for &PL_op */
+	mov_mem_rbx
     };
-    /*
-    unsigned char p_mov_plopptr[] = {
-	mov_mem_4ebp};
-    */
-    unsigned char p_xoreax[] = {
-	/*	sub_x_rsp(8), */
-	0x31,0xc0	
-    };
-    PUSHc(p1);
+    PUSHc(prolog1);
+    PUSHmov(&PL_op);
 #ifdef HAVE_DISPATCH
+    unsigned char prolog2[] = {
+	push_rcx, 
+	mov_mem_ecx};
+    PUSHc(prolog2);
     PUSHmov(&PL_sig_pending);
 #endif
-    /*
-    PUSHc(p_mov_plopptr);
-    PUSHmov(&PL_op);
-    */
-    PUSHc(p_xoreax);			/* xor    %eax, %eax */
     return code;
 }
 T_CHARARR amd64_epilog[] = {
-    /*add_x_esp(8),*/
 #ifdef HAVE_DISPATCH
-    pop_rbx,
+    pop_rcx,
 #endif
-    pop_r12,
+    pop_rbx,
+    add_x_esp(8),
     leave,
     ret};
 
@@ -93,8 +110,8 @@ T_CHARARR amd64_call[]  = {
     0xe8}; /* callq PL_op->op_ppaddr@PLT */
 T_CHARARR amd64_jmp[]   = {0xff,0x25}; /* jmp *$PL_op->op_ppaddr */
 T_CHARARR amd64_save_plop[]  = {
-    /*cltq,*/
-    mov_rax_memr	/* mov    %rax,memrel #save new PL_op */
+    mov_eax_rebx
+    /*mov_rax_memr*/	/* mov    %rax,memrel #save new PL_op */
 };      
 T_CHARARR amd64_nop[]        = {0x90};      /* pad */
 T_CHARARR amd64_nop2[]       = {0x90,0x90};      /* jmp pad */
