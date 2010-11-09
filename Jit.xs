@@ -212,6 +212,7 @@ T_CHARARR NOP[]      = {0x90};    /* nop */
 /* mov    $memabs,(%ebx) &PL_op in ebx */
 #define mov_mem_rbx     0x48,0x8b,0x1d /* mov &PL_op,%rbx */
 #define mov_mem_ecx	0x8b,0x0d      /* &PL_sig_pending */
+#define mov_rebp_ebx(byte) 0x8b,0x5d,byte  /* mov 0x8(%ebp),%ebx*/
 
 #define mov_rebx_mem    0x48,0x89,0x1d /* movq (%ebx), &PL_op */
 #define mov_mem_rebx	0x48,0xc7,0x03 /* movq &PL_op, (%ebx) */

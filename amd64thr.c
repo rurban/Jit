@@ -1,5 +1,6 @@
 /*
-x86_64/amd64 threaded, PL_op in rax, PL_sig_pending in rbx
+x86_64/amd64 threaded, PL_sig_pending in rbx?
+my_perl already on stack, Iop at 8(%ebx)
 
   4008f4:	53                   	push   %rbx
   4008f5:	31 db                	xor    %ebx,%ebx
@@ -31,8 +32,8 @@ x86_64/amd64 threaded, PL_op in rax, PL_sig_pending in rbx
 T_CHARARR amd64thr_prolog[] = {
     push_rbp,
     mov_rsp_rbp,
-    sub_x_rsp(8),
-    push_r12
+    sub_x_rsp(0x20),
+    mov_rebp_ebx(8)       /* mov 0x8(%ebp),%ebx my_perl */
 #ifdef HAVE_DISPATCH
     ,push_rbx,
     0x31,0xdb             /* xor    %ebx,%ebx */
@@ -43,23 +44,18 @@ unsigned char *push_prolog(unsigned char *code) {
     return code;
 }
 T_CHARARR amd64thr_epilog[] = {
-#ifdef HAVE_DISPATCH
-    pop_rbx,
-#endif
-    pop_r12,
-    add_x_esp(8),
+    0xb8,0x00,0x00,0x00,0x00,
     leave,
     ret
 };
 
 T_CHARARR amd64thr_call[]  = {
-    0x48,0x89,0xdf,	/* mov    %rbx,%rdi */
-    0x48,0x89,0x43,0x08,  /* mov    %rax,0x8(%rbx) */
-    0xe8};      		/* callq near offset $PL_op->op_ppaddr */
+    0x89,0x1c,0x24,	/* mov    %ebx,(%esp) */
+    0xE8};      	/* callq near offset $PL_op->op_ppaddr */
 T_CHARARR amd64thr_jmp[]   = {0xff,0x25}; /* jmp *$PL_op->op_ppaddr */
-T_CHARARR amd64thr_save_plop[]  = {
-    0x48,0x89,0x05  /* mov %rax,0x5d14ec(%rip) #save new PL_op */
-};      
+T_CHARARR amd64thr_save_plop[]  = { /* save new PL_op into my_perl */
+    0x89,0x43,0x08	/* mov    %eax,0x8(%ebx) */ 
+};
 T_CHARARR amd64thr_nop2[]       = {0x90,0x90};      /* jmp pad */
 T_CHARARR amd64thr_dispatch_getsig[] = {
     0x8b,0x0d};
