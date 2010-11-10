@@ -1,11 +1,18 @@
-print "1..2\n"; # -*- perl -*-
+# -*- perl -*-
+
 use Config;
 my $c = qq($^X -Mblib -MJit);
 my $dbg = $Config{ccflags} =~ /-DDEBUGGING/;
 my $thr = $Config{useithreads};
-#$c .= " -Dv" if $dbg;
+unless ($dbg) {
+  print "1..0 # SKIP maybranch not yet ready (only with DEBUGGING perl)\n";
+  exit;
+} else {
+  print "1..2\n";
+}
 
 my $p = q( -e 'my $a = 1; if ($a > 2) { die "nok ok 1\n"; } else { print q(ok); }' );
+$c .= " -Dv" if $dbg;
 
 print "# gdb --args $c $p\n" if $dbg;
 print !system(qq($c $p)) ? " 1" : "not ok 1";
