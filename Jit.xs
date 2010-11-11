@@ -413,6 +413,7 @@ call_abs (unsigned char *code, void *addr) {
     return code;
 }
 
+
 int
 jit_chain(pTHX_
 	  OP* op,
@@ -439,16 +440,60 @@ jit_chain(pTHX_
 #ifdef DEBUGGING
 	if (!dryrun) {
 	    opname = (char*)PL_op_name[op->op_type];
-	    DEBUG_v( printf("#pp_%s \t= 0x%x\n", opname, op->op_ppaddr));
+	    DEBUG_v( printf("# pp_%s \t= 0x%x / 0x%x\n", opname, op->op_ppaddr, op));
 	}
+# ifdef JIT_CPU_X86
+        if (DEBUG_s_TEST_) {
+            if (dryrun) {
+#  ifdef USE_ITHREADS
+                unsigned char push_imm[] = { push_imm_0 };
+                size += sizeof(push_imm); size += CALL_SIZE;
+#  endif
+                size += sizeof(CALL); size += CALL_SIZE;
+            } else {
+#  ifdef USE_ITHREADS
+                PUSHc(push_imm);
+                PUSHrel(&my_perl);
+#  endif
+                CALL_ABS(&Perl_debstack);
+#  if defined(__GNUC__)
+                fprintf(stabs, ".stabn 68,0,%d,%d /* Perl_debstack() */\n",
+                        ++line, code-root);
+#  endif
+            }
+        }
+        if (DEBUG_t_TEST_) {
+            unsigned char push_imm[] = { push_imm_0 };
+            if (dryrun) {
+                size += sizeof(push_imm); size += CALL_SIZE;
+#  ifdef USE_ITHREADS
+                size += sizeof(push_imm); size += CALL_SIZE;
+#  endif
+                size += sizeof(CALL); size += CALL_SIZE;
+            } else {
+                PUSHc(push_imm);
+                PUSHrel(op);
+#  ifdef USE_ITHREADS
+                PUSHc(push_imm);
+                PUSHrel(&my_perl);
+#  endif
+                CALL_ABS(&Perl_debop);
+#  if defined(__GNUC__)
+                fprintf(stabs, ".stabn 68,0,%d,%d /* Perl_debop(PL_op) */\n",
+                        ++line, code-root);
+#  endif
+            }
+        }
+# endif
 #endif
+
 	if (op->op_type == OP_NULL) continue;
-# if defined(DEBUGGING) && defined(__GNUC__)
+#if defined(DEBUGGING) && defined(__GNUC__)
 	if (!dryrun) {
 	    fprintf(stabs, ".stabn 68,0,%d,%d /* call pp_%s */\n",
 		    ++line, code-root, opname);
 	}
-# endif
+#endif
 	
 	if (!dryrun) {
 #ifdef DEBUGGING
@@ -591,32 +636,6 @@ jit_chain(pTHX_
 	    }
 	}
 
-#ifdef DEBUGGING
-#ifdef JIT_CPU_X86
-        if (DEBUG_t_TEST_) {
-            unsigned char push_imm[] = { push_imm_0 };
-            if (dryrun) {
-                size += sizeof(push_imm); size += CALL_SIZE;
-#ifdef USE_ITHREADS
-                size += sizeof(push_imm); size += CALL_SIZE;
-#endif
-                size += sizeof(CALL); size += CALL_SIZE;
-            } else {
-                PUSHc(push_imm);
-                PUSHc(op);
-#ifdef USE_ITHREADS
-                PUSHc(push_imm);
-                PUSHc(&my_perl);
-#endif
-                CALL_ABS(&Perl_debop);
-#if defined(DEBUGGING) && defined(__GNUC__)
-                fprintf(stabs, ".stabn 68,0,%d,%d /* Perl_debop(PL_op) */\n",
-                        ++line, code-root);
-#endif
-            }
-        }
-#endif
-#endif
     } while (op = op->op_next);
     return dryrun ? size : (int)code;
 }
@@ -702,7 +721,6 @@ Perl_runops_jit(pTHX)
     size += JIT_CHAIN(PL_op, NULL, NULL);
     size += sizeof(EPILOG);
     while ((size | 0xfffffff0) % 4) { size++; }
-    PL_op = root;
 #ifdef _WIN32
     code = VirtualAlloc(NULL, size,
 			MEM_COMMIT | MEM_RESERVE,
@@ -767,6 +785,7 @@ Perl_runops_jit(pTHX)
 
     /* pass 2: jit */
     code = push_prolog(code);
+    PL_op = root;
     code = (unsigned char*)JIT_CHAIN(PL_op, code, code_sav);
     PUSHc(EPILOG);
     while (((unsigned int)&code | 0xfffffff0) % 4) { *(code++) = NOP[0]; }
@@ -823,6 +842,7 @@ Perl_runops_jit(pTHX)
 /*================= Jit.xs:686 runops_jit_0 == disassemble code code+40 =====*/
     (*((void (*)(pTHX))code))(aTHX);
 /*================= runops_jit =================================*/
+    DEBUG_l(Perl_deb(aTHX_ "leaving RUNOPS JIT level\n"));
 #ifdef PROFILING
     if (profiling) {
         printf("jit runloop:\t%0.12f\n", mytime() - bench);
