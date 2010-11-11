@@ -5,7 +5,7 @@ my $c = qq($^X -Mblib -MJit);
 my $dbg = $Config{ccflags} =~ /-DDEBUGGING/;
 my $thr = $Config{useithreads};
 unless ($dbg) {
-  print "1..0 # SKIP maybranch not yet ready (only with DEBUGGING perl)\n";
+  print "1..0 # SKIP maybranch not yet ready (only tested with DEBUGGING perl)\n";
   exit;
 } else {
   print "1..2\n";

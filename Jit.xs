@@ -662,7 +662,7 @@ Perl_runops_jit(pTHX)
 			MEM_COMMIT | MEM_RESERVE,
 			PAGE_EXECUTE_READWRITE);
 #else
-  /* amd64/linux+bsd disallow mprotect'ing an unaligned heap.
+  /* amd64/linux+bsd disallow mprotect'ing an unaligned heap. Windows/cygwin even on i386.
      We NEED to start it in a fresh new page. */
 # ifdef HAS_GETPAGESIZE
     pagesize = getpagesize();
@@ -674,6 +674,21 @@ Perl_runops_jit(pTHX)
     code = (char*)posix_memalign(pagesize, size*sizeof(char));
 #  else
     code = (char*)malloc(size);
+    if ((int)code & (pagesize-1)) { /* need to align it manually to 0x1000 */
+        int newsize = pagesize - ((int)code & (pagesize-1));
+        free(code);
+        code = (char*)malloc(size + newsize);
+        DEBUG_v( printf("# manually align code=0x%x newsize=%x\n",code, size + newsize) );
+        if ((int)code & (pagesize-1)) {
+            /* hardcode pagesize = 4096 */
+#if PTRSIZE == 4
+            code = (char*)(((int)code & 0xfffff000) + 0x1000);
+#else
+            code = (char*)(((int)code & 0xfffffffffffff000) + 0x1000);
+#endif
+            DEBUG_v( printf("# re-aligned stripped code=0x%x size=%u\n",code, size) );
+        }
+    }
 #  endif
 # endif
 #endif
