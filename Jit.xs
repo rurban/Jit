@@ -37,7 +37,7 @@
 int dispatch_needed(OP* op);
 int maybranch(OP* op);
 unsigned char *push_prolog(unsigned char *code);
-int jit_chain(OP* op, unsigned char *code, unsigned char *root
+int jit_chain(pTHX_ OP* op, unsigned char *code, unsigned char *root
 #ifdef DEBUGGING
               ,FILE *fh, FILE *stabs
 #endif
@@ -60,13 +60,13 @@ int jit_chain(OP* op, unsigned char *code, unsigned char *root
 #endif
 
 #ifdef DEBUGGING
-# define JIT_CHAIN(op, code, root) jit_chain(op, code, root, fh, stabs)
+# define JIT_CHAIN(op, code, root) jit_chain(aTHX_ op, code, root, fh, stabs)
 # define DEB_PRINT_LOC(loc) printf(loc" \t= 0x%x\n", loc)
 # if PERL_VERSION < 8
 #   define DEBUG_v(x) x
 # endif
 #else
-# define JIT_CHAIN(op, code, root) jit_chain(op, code, root) 
+# define JIT_CHAIN(op, code, root) jit_chain(aTHX_ op, code, root) 
 # define DEB_PRINT_LOC(loc)
 #endif
 
@@ -116,7 +116,7 @@ threaded, same logic as above, just:
 # define SIG_PENDING_OFFSET 	4*PTRSIZE	/* my_perl->Isig_pending offset */
 #endif
 
-#define CALL_ABS(abs) 	call_abs(code,abs)
+#define CALL_ABS(abs) 	code = call_abs(code,abs)
 /*(U32)((unsigned char*)abs-code-3)*/
 #define PUSHc(what) memcpy(code,what,sizeof(what)); code += sizeof(what)
 /* force 4 byte for U32, 64bit uses 8 byte for U32, but 4 byte for call near */
@@ -128,7 +128,11 @@ threaded, same logic as above, just:
 #define CALL_ALIGN 4
 #undef  MOV_REL
 
-#define PUSHmov(what) memcpy(code,what,MOV_SIZE); code += MOV_SIZE
+#define PUSHrel(what) memcpy(code,what,MOV_SIZE); code += MOV_SIZE
+#define revword(m)	(((unsigned int)m)&0xff),((((unsigned int)m)&0xff00)>>8), \
+        ((((unsigned int)m)&0xff0000)>>16),((((unsigned int)m)&0xff000000)>>24)
+#define absword(m)	((((unsigned int)m)&0xff000000)>>24), \
+        ((((unsigned int)m)&0xff0000)>>16),((((unsigned int)m)&0xff00)>>8),(((unsigned int)m)&0xff)
 
 T_CHARARR NOP[]      = {0x90};    /* nop */
 
@@ -141,12 +145,15 @@ T_CHARARR NOP[]      = {0x90};    /* nop */
 #define push_ecx	0x51
 #define sub_x_esp(byte) 0x83,0xec,byte
 #define mov_eax_rebx	0x89,0x03	/* mov    %rax,(%rbx) &PL_op in ebx */
+
+#define push_imm_0	0x68
+#define push_imm(m)	0x68,revword(m)
+/* mov    $memabs,%eax PL_op in eax */
+#define mov_mem_eax(m)	0xa1,revword(m)
 /* mov    $memabs,%ebx &PL_op in ebx */
-#define mov_mem_ebx(m)	0xbb,(((unsigned int)m)&0xff),((((unsigned int)m)&0xff00)>>8), \
-        ((((unsigned int)m)&0xff0000)>>16),((((unsigned int)m)&0xff000000)>>24)
+#define mov_mem_ebx(m)	0xbb,revword(m)
 /* &PL_sig_pending in -4(%ebp) */
-#define mov_mem_4ebp(m)	0xc7,0x45,0xfc,((((unsigned int)m)&0xff000000)>>24), \
-        ((((unsigned int)m)&0xff0000)>>16),((((unsigned int)m)&0xff00)>>8),(((unsigned int)m)&0xff)
+#define mov_mem_4ebp(m)	0xc7,0x45,0xfc,absword(m)
 #define mov_mem_recx 	0x8b,0x0d
 #define mov_rebp_ebx(byte) 0x8b,0x5d,byte  /* mov 0x8(%ebp),%ebx*/
 
@@ -191,12 +198,16 @@ T_CHARARR NOP[]      = {0x90};    /* nop */
 #define CALL_ALIGN 0
 #define MOV_REL
 
-#define PUSHmov(where) { \
+#define PUSHrel(where) { \
     U32 r = (unsigned char*)where - (code+MOV_SIZE);	\
     memcpy(code,&r,MOV_SIZE); code += MOV_SIZE; \
 }
-void f_PUSHmov(unsigned char* code, void *where);
-/*#define PUSHmov(where) f_PUSHmov(code,(void*)where); code += MOV_SIZE;*/
+void f_PUSHrel(unsigned char* code, void *where);
+/*#define PUSHrel(where) f_PUSHrel(code,(void*)where); code += MOV_SIZE;*/
+#define revword(m)	(((unsigned int)m)&0xff),((((unsigned int)m)&0xff00)>>8), \
+        ((((unsigned int)m)&0xff0000)>>16),((((unsigned int)m)&0xff000000)>>24), \
+        ((((unsigned int)m)&0xff00000000)>>32),((((unsigned int)m)&0xff00000000)>>40), \
+        ((((unsigned int)m)&0xff0000000000)>>48),((((unsigned int)m)&0xff0000000000)>>56)
 
 T_CHARARR NOP[]      = {0x90};    /* nop */
 
@@ -209,6 +220,7 @@ T_CHARARR NOP[]      = {0x90};    /* nop */
 #define sub_x_rsp(byte) 0x48,0x83,0xec,byte
 #define add_x_esp(byte) 0x48,0x83,0xc4,byte
 #define fourbyte        0x00,0x00,0x00,0x00
+#define mov_mem_eax(m)	0xa1,revword(m)
 /* mov    $memabs,(%ebx) &PL_op in ebx */
 #define mov_mem_rbx     0x48,0x8b,0x1d /* mov &PL_op,%rbx */
 #define mov_mem_ecx	0x8b,0x0d      /* &PL_sig_pending */
@@ -255,7 +267,7 @@ T_CHARARR NOP[]      = {0x90};    /* nop */
 # include "amd64.c"
 #endif
 
-void f_PUSHmov(unsigned char* code, void *where) {
+void f_PUSHrel(unsigned char* code, void *where) {
     U32 r = (unsigned char*)where - (code+MOV_SIZE);
     memcpy(code,&r,MOV_SIZE); 
 }
@@ -266,14 +278,14 @@ void f_PUSHmov(unsigned char* code, void *where) {
 #error "Only intel x86_32 and x86_64/amd64 supported so far"
 #endif
 
-#ifndef PUSHmov
+#ifndef PUSHrel
 # ifdef MOV_REL /* amd64 */
-#  define PUSHmov(where) { \
+#  define PUSHrel(where) { \
     U32 r = (unsigned char*)where - (code+4); \
     memcpy(code,&r,MOV_SIZE); code += MOV_SIZE; \
 }
 # else
-#  define PUSHmov(what) memcpy(code,what,MOV_SIZE); code += MOV_SIZE
+#  define PUSHrel(what) memcpy(code,what,MOV_SIZE); code += MOV_SIZE
 # endif
 #endif
 
@@ -402,7 +414,7 @@ call_abs (unsigned char *code, void *addr) {
 }
 
 int
-jit_chain(
+jit_chain(pTHX_
 	  OP* op,
 	  unsigned char *code, 
 	  unsigned char *root
@@ -450,7 +462,7 @@ jit_chain(
 	if (dryrun) {
 	    size += sizeof(CALL); size += CALL_SIZE;
 	} else {
-	    code = CALL_ABS(op->op_ppaddr);
+	    CALL_ABS(op->op_ppaddr);
 #if defined(DEBUGGING) && defined(__GNUC__)
 	    fprintf(stabs, ".stabn 68,0,%d,%d /* PL_op = eax */\n",
 		    ++line, code-root);
@@ -484,7 +496,7 @@ jit_chain(
 		size += MOV_SIZE;
 	    } else {
 		PUSHc(DISPATCH_GETSIG);
-		PUSHmov(&PL_sig_pending);
+		PUSHrel(&PL_sig_pending);
 #  if defined(DEBUGGING) && defined(__GNUC__)
 		fprintf(stabs, ".stabn 68,0,%d,%d /* Perl_despatch_signals() */\n",
 			++line, code-root);
@@ -496,7 +508,7 @@ jit_chain(
 		size += MOV_SIZE;
 	    } else {
 		PUSHc(DISPATCH);
-		PUSHmov(&Perl_despatch_signals);
+		PUSHrel(&Perl_despatch_signals);
 	    }
 # ifdef USE_ITHREADS
 	    if (dryrun) {
@@ -516,7 +528,7 @@ jit_chain(
 		size += sizeof(CALL); size += CALL_SIZE;
 	    } else {
 		code = push_maybranch_plop(code);
-		code = CALL_ABS(op->op_ppaddr);
+		CALL_ABS(op->op_ppaddr);
 	    }
 	    if ((PL_opargs[op->op_type] & OA_CLASS_MASK) == OA_LOGOP) {
 		/* TODO store and jump to labels */
@@ -579,6 +591,32 @@ jit_chain(
 	    }
 	}
 
+#ifdef DEBUGGING
+#ifdef JIT_CPU_X86
+        if (DEBUG_t_TEST_) {
+            unsigned char push_imm[] = { push_imm_0 };
+            if (dryrun) {
+                size += sizeof(push_imm); size += CALL_SIZE;
+#ifdef USE_ITHREADS
+                size += sizeof(push_imm); size += CALL_SIZE;
+#endif
+                size += sizeof(CALL); size += CALL_SIZE;
+            } else {
+                PUSHc(push_imm);
+                PUSHc(op);
+#ifdef USE_ITHREADS
+                PUSHc(push_imm);
+                PUSHc(&my_perl);
+#endif
+                CALL_ABS(&Perl_debop);
+#if defined(DEBUGGING) && defined(__GNUC__)
+                fprintf(stabs, ".stabn 68,0,%d,%d /* Perl_debop(PL_op) */\n",
+                        ++line, code-root);
+#endif
+            }
+        }
+#endif
+#endif
     } while (op = op->op_next);
     return dryrun ? size : (int)code;
 }
@@ -626,6 +664,14 @@ Perl_runops_jit(pTHX)
     if (sv_prof) {
         profiling = SvIV_nomg(sv_prof);
     }
+#endif
+
+#ifdef DEBUGGING
+    if (!PL_op) {
+	Perl_ck_warner_d(aTHX_ packWARN(WARN_DEBUGGING), "NULL OP IN JIT RUN");
+	return 0;
+    }
+    DEBUG_l(Perl_deb(aTHX_ "Entering new RUNOPS JIT level\n"));
 #endif
 
     /* quirky pass 1: need size to allocate code.
@@ -736,10 +782,10 @@ Perl_runops_jit(pTHX)
     system("as run-jit.s -o run-jit.o");
 # endif
 # ifdef HAVE_DISPATCH
-    DEBUG_v( printf("#Perl_despatch_signals \t= 0x%x\n",
+    DEBUG_v( printf("# Perl_despatch_signals \t= 0x%x\n",
                     Perl_despatch_signals) );
 #  if !defined(USE_ITHREADS)
-    DEBUG_v( printf("#PL_sig_pending \t= 0x%x\n",&PL_sig_pending) );
+    DEBUG_v( printf("# &PL_sig_pending \t= 0x%x\n", &PL_sig_pending) );
 #  endif
 # endif
 #endif
@@ -756,10 +802,13 @@ Perl_runops_jit(pTHX)
 
     /* gdb: disassemble code code+200 */
 #ifdef DEBUGGING
-    DEBUG_v( printf("#PL_op    \t= 0x%x\n",&PL_op) );
-    DEBUG_v( printf("#code() 0x%x size %d",code,size) );
+    DEBUG_v( printf("# &PL_op   \t= 0x%x / *0x%x\n",&PL_op, PL_op) );
+#ifdef USE_ITHREADS
+    DEBUG_v( printf("# &my_perl \t= 0x%x / *0x%x\n",&my_perl, my_perl) );
+#endif
+    DEBUG_v( printf("# code() 0x%x size %d",code,size) );
     for (i=0; i < size; i++) {
-        if (!(i % 8)) DEBUG_v( printf("\n#") );
+        if (!(i % 8)) DEBUG_v( printf("\n#(code+%3d): ", i) );
         DEBUG_v( printf("%02x ",code[i]) );
     }
     DEBUG_v( printf("\n# runops_jit_%d\n", global_loops-1) );

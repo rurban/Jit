@@ -86,13 +86,13 @@ unsigned char *push_prolog(unsigned char *code) {
 	mov_mem_rbx
     };
     PUSHc(prolog1);
-    PUSHmov(&PL_op);
+    PUSHrel(&PL_op);
 #ifdef HAVE_DISPATCH
     unsigned char prolog2[] = {
 	push_rcx, 
 	mov_mem_ecx};
     PUSHc(prolog2);
-    PUSHmov(&PL_sig_pending);
+    PUSHrel(&PL_sig_pending);
 #endif
     return code;
 }
@@ -133,7 +133,7 @@ unsigned char *push_maybranch_plop(unsigned char *code) {
 	mov_eax_8ebp
     };
     PUSHc(maybranch_plop1);
-    PUSHmov(&PL_op);
+    PUSHrel(&PL_op);
     PUSHc(maybranch_plop2);
     return code;
 }
