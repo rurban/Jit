@@ -586,7 +586,7 @@ jit_chain(pTHX_
                     int next = JIT_CHAIN(cLOGOPx(op)->op_other, NULL, NULL);
                     code = push_gotorel(code, next);
                     code = (unsigned char*)JIT_CHAIN(cLOGOPx(op)->op_other, code, root);
-                    next = JIT_CHAIN(cLOGOPx(op)->op_next, NULL, NULL);
+                    next = JIT_CHAIN(cLOGOPx(op)->op_next, code, root);
                     code = push_gotorel(code, (int)code+next);
                 }
 	    } else {
