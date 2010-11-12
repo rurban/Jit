@@ -68,8 +68,8 @@ Dump of assembler code from 0x1127000 to 0x1127058:
 T_CHARARR amd64_prolog[] = {
     push_rbp,
     mov_rsp_rbp,
-    sub_x_rsp(8),
     push_rbx, 		/* &PL_op */
+    sub_x_rsp(8),
     mov_mem_rbx, fourbyte
 #ifdef HAVE_DISPATCH	/* &PL_sig_pending */
     ,push_rcx,
@@ -80,9 +80,9 @@ T_CHARARR amd64_prolog[] = {
 unsigned char *push_prolog(unsigned char *code) {
     unsigned char prolog1[] = {
 	push_rbp,
-	mov_rsp_rbp,
-	sub_x_rsp(8),
+        mov_rsp_rbp,
 	push_rbx, 	/* for &PL_op */
+	sub_x_rsp(8),
 	mov_mem_rbx
     };
     PUSHc(prolog1);
@@ -110,8 +110,8 @@ T_CHARARR amd64_call[]  = {
     0xe8}; /* callq PL_op->op_ppaddr@PLT */
 T_CHARARR amd64_jmp[]   = {0xff,0x25}; /* jmp *$PL_op->op_ppaddr */
 T_CHARARR amd64_save_plop[]  = {
-    mov_eax_rebx
-    /*mov_rax_memr*/	/* mov    %rax,memrel #save new PL_op */
+    /*mov_eax_rebx*/    /* fails on amd64 */
+    mov_rax_memr	/* mov    %rax,memrel #save new PL_op */
 };      
 T_CHARARR amd64_nop[]        = {0x90};      /* pad */
 T_CHARARR amd64_nop2[]       = {0x90,0x90};      /* jmp pad */
