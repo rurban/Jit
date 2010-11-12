@@ -232,12 +232,14 @@ T_CHARARR NOP[]      = {0x90};    /* nop */
 #define mov_mem_rbx     0x48,0x8b,0x1d /* mov &PL_op,%rbx */
 #define mov_mem_ecx	0x8b,0x0d      /* &PL_sig_pending */
 #define mov_rebp_ebx(byte) 0x8b,0x5d,byte  /* mov 0x8(%ebp),%ebx*/
+#define mov_rrsp_rbx    0x48,0x8b,0x1c,0x24    /* mov    (%rsp),%rbx ; my_perl from stack to rbx */
 
 #define push_imm_0	0x68
 #define push_imm(m)	0x68,revword(m)
 #define mom_mem_esi     0xbe		/* arg2 */
 #define mom_mem_edi     0xbf		/* arg1 */
 
+#define mov_rbx_rdi     0x48,0x89,0xdf /* my_perl => arg1 */
 #define mov_rebx_mem    0x48,0x89,0x1d /* movq (%ebx), &PL_op */
 #define mov_mem_rebx	0x48,0xc7,0x03 /* movq &PL_op, (%ebx) */
 #define mov_eax_rebx	0x89,0x03      /* movq %rax,(%rbx) &PL_op in ebx */
@@ -804,7 +806,12 @@ Perl_runops_jit(pTHX)
     fprintf(stabs, ".stabs \"struct op:t(0,5)=*(0,6)\",128,0,0,0\n");
 # ifdef USE_ITHREADS
     fprintf(stabs, ".stabs \"PerlInterpreter:S(0,12)\",38,0,0,%p\n", /* variable in data section */
-            (char*)&my_perl);
+#  ifdef MOV_REL
+            0 /*(unsigned char*)&my_perl - code*/
+#  else
+            (char*)&my_perl
+#  endif
+	    );
 # endif
     fprintf(stabs, ".stabn 68,0,%d,0\n", line);
     global_loops++;
