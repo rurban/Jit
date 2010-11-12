@@ -8,5 +8,5 @@ my $thr = $Config{useithreads};
 $p = q( -e 'sub f{die "ok 1"}; f; print "not ok 1"');
 print "# gdb --args $c $p\n";
 system(qq($c $p));
-print " #TODO Perl_pp_leave scopestack block assertion (enter missing?)\n"
+print " #TODO Perl_pp_leave scopestack block assertion. First enter missing.\n"
   if $DEBUGGING and !$thr;

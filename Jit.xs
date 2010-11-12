@@ -454,7 +454,7 @@ jit_chain(pTHX_
 	    opname = (char*)PL_op_name[op->op_type];
 	    DEBUG_v( printf("# pp_%s \t= 0x%x / 0x%x\n", opname, op->op_ppaddr, op));
 	}
-# if JIT_CPU_X86
+# if defined(JIT_CPU_X86) && defined(DEBUG_s_TEST_)
         if (DEBUG_s_TEST_) {
             unsigned char push_imm[] = { push_imm_0 };
             if (dryrun) {
@@ -717,10 +717,12 @@ Perl_runops_jit(pTHX)
 #endif
 
 #ifdef DEBUGGING
+# if PERL_VERSION > 11
     if (!PL_op) {
 	Perl_ck_warner_d(aTHX_ packWARN(WARN_DEBUGGING), "NULL OP IN JIT RUN");
 	return 0;
     }
+# endif
     DEBUG_l(Perl_deb(aTHX_ "Entering new RUNOPS JIT level\n"));
 #endif
 

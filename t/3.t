@@ -12,7 +12,7 @@ unless ($dbg) {
 }
 
 my $p = q( -e 'my $a = 1; if ($a > 2) { die "nok ok 1\n"; } else { print q(ok); }' );
-$c .= " -Dv" if $dbg;
+$c .= " -Dv" if $dbg and $] > 5.008;
 
 print "# gdb --args $c $p\n" if $dbg;
 print !system(qq($c $p)) ? " 1" : "not ok 1";

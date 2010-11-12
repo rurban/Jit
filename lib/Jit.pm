@@ -15,11 +15,13 @@ use vars qw( @ISA $VERSION );
 
 Jit->bootstrap($VERSION);
 
-=head NAME
+=pod
 
-Jit the perl5 runloop in proper execution order and near calls.
+=head1 NAME
 
-=head DESCRIPTION
+Jit the perl5 runops loop in proper execution order
+
+=head1 DESCRIPTION
 
 It does only work yet for simple functions! No subs, no branches.
 Only intel (i386 and amd64) yet.
@@ -37,10 +39,10 @@ The old indirect call far costs about 70 cycles,
 the new direct call near costs 3-5 cycles and is cached.
 
 Speed up:
-  TODO
+  See http://blogs.perl.org/users/rurban/2010/11/performance-hacks.html
 
 Additional memory costs:
-  TODO
+  2-10 byte per op
 
 =head1 AUTHOR
 

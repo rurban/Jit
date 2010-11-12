@@ -1,3 +1,28 @@
+v0.04_01 2010-11-12 rurban
+
+make amd64 non-threaded work again (old absolute save_plop)
+  amd64 r12 unused, only rbx and rcx. maybranch not yet refactored
+
+forgot LOGOP JIT_CHAIN code+root, so the op->next block (true) was never emitted
+1st simple profiling looks promising
+  See http://blogs.perl.org/users/rurban/2010/11/performance-hacks.html
+Try to overcome a missing memalign, by manually aligning the malloced code section, 
+  first to pagesize, then to 4096. Fails tests on cygwin, but this has memalign.
+implement -Dt debop op tracing within the jit, also -Ds debstack
+add my_perl to jit_chain
+rename PUSHmov to PUSHrel     
+CALL_ABS changes code
+add absword and revword macros, use it
+add push_imm, push_imm_0 (call any functions)
+
+skip t/3.t on no DEBUGGING perl
+
+check old DEBUG_s..., Perl_ck_warner_d, fix pod
+adjust docs (threaded works now)
+add explicit abstract and license
+
+TODO first PL_op enter definitevly missing (test 2)
+
 v0.04 2010-11-07 rurban
 
 Fixed i386 1.t + 2.t, threaded and non-threaded
