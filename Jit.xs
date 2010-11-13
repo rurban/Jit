@@ -37,7 +37,7 @@
 int dispatch_needed(OP* op);
 int maybranch(OP* op);
 unsigned char *push_prolog(unsigned char *code);
-long jit_chain(pTHX_ OP* op, unsigned char *code, unsigned char *root
+long jit_chain(pTHX_ OP* op, unsigned char *code, unsigned char *code_start
 #ifdef DEBUGGING
               ,FILE *fh, FILE *stabs
 #endif
@@ -60,13 +60,13 @@ long jit_chain(pTHX_ OP* op, unsigned char *code, unsigned char *root
 #endif
 
 #ifdef DEBUGGING
-# define JIT_CHAIN(op, code, root) jit_chain(aTHX_ op, code, root, fh, stabs)
+# define JIT_CHAIN(op, code, code_start) jit_chain(aTHX_ op, code, code_start, fh, stabs)
 # define DEB_PRINT_LOC(loc) printf(loc" \t= 0x%x\n", loc)
 # if PERL_VERSION < 8
 #   define DEBUG_v(x) x
 # endif
 #else
-# define JIT_CHAIN(op, code, root) jit_chain(aTHX_ op, code, root) 
+# define JIT_CHAIN(op, code, code_start) jit_chain(aTHX_ op, code, code_start) 
 # define DEB_PRINT_LOC(loc)
 #endif
 
@@ -110,6 +110,14 @@ threaded, same logic as above, just:
 
 #define CALL_SIZE  4				/* size for the call instruction arg */
 #define MOV_SIZE   4				/* size for the mov instruction arg */
+
+/* multi without threads yet unhandled. should be a simple s/USE_ITHREADS/MULTIPLICITY/ */
+#if defined(MULTIPLICITY) && !defined(USE_ITHREADS)
+# error "MULTIPLICITY without ITHREADS not supported"
+#endif
+#if defined(USE_THREADS) && !defined(USE_ITHREADS)
+# error "USE_THREADS without ITHREADS not supported"
+#endif
 #ifdef USE_ITHREADS
 /* threads: offsets are perl version and ptrsize dependent */
 # define IOP_OFFSET 		PTRSIZE		/* my_perl->Iop_pending offset */
@@ -435,9 +443,9 @@ call_abs (unsigned char *code, void *addr) {
 
 long
 jit_chain(pTHX_
-	  OP* op,
+	  OP *op,
 	  unsigned char *code, 
-	  unsigned char *root
+	  unsigned char *code_start
 #ifdef DEBUGGING
 	  ,FILE *fh, FILE *stabs
 #endif
@@ -452,6 +460,7 @@ jit_chain(pTHX_
     if (!dryrun) {
 	opname = (char*)PL_op_name[op->op_type];
         fprintf(fh, "/* block jit_chain op 0x%x pp_%s; */\n", op, opname);
+        line++;
     }
 #endif
 
@@ -478,8 +487,9 @@ jit_chain(pTHX_
 #  endif
                 CALL_ABS(&Perl_debstack);
 #  if defined(__GNUC__)
-                fprintf(stabs, ".stabn 68,0,%d,%d /* Perl_debstack() */\n",
-                        ++line, code-root);
+                fprintf(fh, "debstack();\n");
+                fprintf(stabs, ".stabn 68,0,%d,%d /* Perl_debstack(aTHX) */\n",
+                        ++line, code-code_start);
 #  endif
             }
         }
@@ -506,10 +516,12 @@ jit_chain(pTHX_
                     PUSHabs(op);
 #  endif
                     CALL_ABS(&Perl_debop);
+                    DEBUG_v( printf("# debop(%x) %s\n", op, (char*)PL_op_name[op->op_type]));
                 }
 #  if defined(__GNUC__)
-                fprintf(stabs, ".stabn 68,0,%d,%d /* Perl_debop(PL_op) */\n",
-                        ++line, code-root);
+                fprintf(fh, "debop(PL_op);\n");
+                fprintf(stabs, ".stabn 68,0,%d,%d /* Perl_debop(aTHX_ PL_op) */\n",
+                        ++line, code-code_start);
 #  endif
             }
         }
@@ -520,7 +532,7 @@ jit_chain(pTHX_
 #if defined(DEBUGGING) && defined(__GNUC__)
 	if (!dryrun) {
 	    fprintf(stabs, ".stabn 68,0,%d,%d /* call pp_%s */\n",
-		    ++line, code-root, opname);
+		    ++line, code-code_start, opname);
 	}
 #endif
 	
@@ -539,7 +551,7 @@ jit_chain(pTHX_
 	    CALL_ABS(op->op_ppaddr);
 #if defined(DEBUGGING) && defined(__GNUC__)
 	    fprintf(stabs, ".stabn 68,0,%d,%d /* PL_op = eax */\n",
-		    ++line, code-root);
+		    ++line, code-code_start);
 #endif
 	}
 
@@ -565,7 +577,7 @@ jit_chain(pTHX_
 # endif
 # ifdef __GNUC__
 		fprintf(stabs, ".stabn 68,0,%d,%d /* if (PL_sig_pending) */\n",
-			++line, code-root);
+			++line, code-code_start);
 # endif
 	    }
 #endif
@@ -579,7 +591,7 @@ jit_chain(pTHX_
 		PUSHrel(&PL_sig_pending);
 #  if defined(DEBUGGING) && defined(__GNUC__)
 		fprintf(stabs, ".stabn 68,0,%d,%d /* Perl_despatch_signals() */\n",
-			++line, code-root);
+			++line, code-code_start);
 #  endif
 	    }
 # endif
@@ -620,8 +632,8 @@ jit_chain(pTHX_
                     /* XXX TODO cmp returned op => je */
                     int next = JIT_CHAIN(cLOGOPx(op)->op_other, NULL, NULL);
                     code = push_gotorel(code, next);
-                    code = (unsigned char*)JIT_CHAIN(cLOGOPx(op)->op_other, code, root);
-                    next = JIT_CHAIN(cLOGOPx(op)->op_next, code, root);
+                    code = (unsigned char*)JIT_CHAIN(cLOGOPx(op)->op_other, code, code_start);
+                    next = JIT_CHAIN(cLOGOPx(op)->op_next, code, code_start);
                     code = push_gotorel(code, (long)code+next);
                 }
 	    } else {
@@ -631,7 +643,7 @@ jit_chain(pTHX_
 		case OP_FLIP:
 		    if ((op->op_flags & OPf_WANT) == OPf_WANT_LIST) {
                         if (!dryrun) {
-                            label = JIT_CHAIN(cLOGOPx(cUNOPx(op)->op_first)->op_other, code, root);
+                            label = JIT_CHAIN(cLOGOPx(cUNOPx(op)->op_first)->op_other, code, code_start);
                             size += label-(int)code;
                             code = (unsigned char *)label;
                         }
@@ -640,17 +652,17 @@ jit_chain(pTHX_
 		case OP_ENTERLOOP:
 		case OP_ENTERITER:
                     if (!dryrun) {
-                        label = JIT_CHAIN(cLOOPx(op)->op_nextop, code, root);
+                        label = JIT_CHAIN(cLOOPx(op)->op_nextop, code, code_start);
                         size += label-(int)code;
-                        label = JIT_CHAIN(cLOOPx(op)->op_lastop, (char*)label, root);
+                        label = JIT_CHAIN(cLOOPx(op)->op_lastop, (char*)label, code_start);
                         size += label-(int)code;
-                        label = JIT_CHAIN(cLOOPx(op)->op_redoop, (char*)label, root);
+                        label = JIT_CHAIN(cLOOPx(op)->op_redoop, (char*)label, code_start);
                         size += label-(int)code;
                     }
 		    break;
 		case OP_SUBSTCONT:
                     if (!dryrun) {
-                        next = JIT_CHAIN(cLOGOPx(op)->op_other, code, root);
+                        next = JIT_CHAIN(cLOGOPx(op)->op_other, code, code_start);
                         size += next-(int)code;
                     }
 #if PERL_VERSION > 8
@@ -659,7 +671,7 @@ jit_chain(pTHX_
 # define PMREPLSTART(op) (op)->op_pmreplstart
 #endif
                     if (!dryrun) {
-                        label = JIT_CHAIN(PMREPLSTART(cPMOPx(op)), code, root);
+                        label = JIT_CHAIN(PMREPLSTART(cPMOPx(op)), code, code_start);
                         size += label-(int)code;
                     }
 		    /* TODO runtime check: goto label, else return next->next */
@@ -670,7 +682,6 @@ jit_chain(pTHX_
 		}
 	    }
 	}
-
     } while (op = op->op_next);
     return dryrun ? size : (int)code;
 }
@@ -704,7 +715,7 @@ Perl_runops_jit(pTHX)
 #endif
 #endif
     U32 rel; /* 4 byte int */
-    unsigned char *code, *code_sav;
+    unsigned char *code, *code_start;
 #if !defined(MOV_REL) && !defined(USE_ITHREADS)
     void *PL_op_ptr = &PL_op;
 #endif
@@ -793,7 +804,7 @@ Perl_runops_jit(pTHX)
 #  endif
 # endif
 #endif
-    code_sav = code;
+    code_start = code;
 
 #if defined(DEBUGGING) && defined(__GNUC__)
     stabs = fopen("run-jit.s", "a");
@@ -828,7 +839,7 @@ Perl_runops_jit(pTHX)
     /* pass 2: jit */
     code = push_prolog(code);
     PL_op = root;
-    code = (unsigned char*)JIT_CHAIN(PL_op, code, code_sav);
+    code = (unsigned char*)JIT_CHAIN(PL_op, code, code_start);
     PUSHc(EPILOG);
     while (((unsigned int)&code | 0xfffffff0) % 4) { *(code++) = NOP[0]; }
 
@@ -850,11 +861,11 @@ Perl_runops_jit(pTHX)
 #  endif
 # endif
 #endif
-    /*I_ASSERT(size == (code - code_sav));*/
-    /*size = code - code_sav;*/
+    /*I_ASSERT(size == (code - code_start));*/
+    /*size = code - code_start;*/
 
     PL_op = root;
-    code = code_sav;
+    code = code_start;
 #ifdef HAS_MPROTECT
     if (mprotect(code,size*sizeof(char),PROT_EXEC|PROT_READ|PROT_WRITE) < 0)
 	croak ("mprotect code=0x%x for size=%u failed", code, size);

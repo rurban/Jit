@@ -8,7 +8,7 @@
 #      Assemble into a mprotected string and call into it instead of the runloop
 
 package Jit;
-our $VERSION = '0.0402';
+our $VERSION = '0.04_02';
 require DynaLoader;
 use vars qw( @ISA $VERSION );
 @ISA = qw(DynaLoader);
@@ -23,8 +23,9 @@ Jit the perl5 runops loop in proper execution order
 
 =head1 DESCRIPTION
 
-It does only work yet for simple functions! No subs, no branches.
-Only intel (i386 and amd64) yet.
+WARNING: It does only work yet for simple functions! No branches.
+Only intel CPU's 32 and 64bit (i386 and amd64) yet.
+amd64 threaded fails currently.
 
 This perl5 jitter is super-simple. The compiled optree from
 the perl5 parser is a linked list in memory in non-execution

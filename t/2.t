@@ -14,4 +14,4 @@ if ($r =~ /ok 1/m) {
   print "not ok 1";
 }
 print " #TODO Perl_pp_leave scopestack block assertion. First enter missing.\n"
-  if $DEBUGGING and !$thr;
+  if $DEBUGGING;

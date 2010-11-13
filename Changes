@@ -1,5 +1,8 @@
-v0.0402 2010-11-13 rurban
-no major changes to 0.04_01
+v0.04_02 2010-11-13 rurban
+
+fixed -Dt for amd64
+do not support MULTIPLICITY without ITHREADS
+2.t first enter works again on i386, just not when calling -Dt (probably some register sideeffect).
 
 v0.04_01 2010-11-12 rurban
 

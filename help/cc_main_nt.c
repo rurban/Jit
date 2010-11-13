@@ -9,13 +9,18 @@ static OP * pp_main();
 #else
 #  define PERL_ASYNC_CHECK
 #endif
-
+OP *myop;
 
 static OP * pp_main() 
 {
     register OP* op; 
     register int *plop = &PL_op;
     register int *p = &PL_sig_pending;
+
+#ifdef DEBUGGING
+    debstack();
+    debop(myop);
+#endif
 
     *plop = Perl_pp_enter();
     PL_op = Perl_pp_nextstate();
