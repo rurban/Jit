@@ -78,7 +78,7 @@ T_CHARARR amd64_prolog[] = {
 };
 
 unsigned char *push_prolog(unsigned char *code) {
-    unsigned char prolog1[] = {
+    T_CHARARR prolog1[] = {
 	push_rbp,
         mov_rsp_rbp,
 	push_rbx, 	/* for &PL_op */
@@ -88,7 +88,7 @@ unsigned char *push_prolog(unsigned char *code) {
     PUSHc(prolog1);
     PUSHrel(&PL_op);
 #ifdef HAVE_DISPATCH
-    unsigned char prolog2[] = {
+    T_CHARARR prolog2[] = {
 	push_rcx, 
 	mov_mem_ecx};
     PUSHc(prolog2);
@@ -126,10 +126,10 @@ T_CHARARR maybranch_plop[] = {
     mov_eax_8ebp
 };
 unsigned char *push_maybranch_plop(unsigned char *code) {
-    unsigned char maybranch_plop1[] = {
+    T_CHARARR maybranch_plop1[] = {
 	mov_mem_rebx
     };
-    unsigned char maybranch_plop2[] = {
+    T_CHARARR maybranch_plop2[] = {
 	mov_eax_8ebp
     };
     PUSHc(maybranch_plop1);

@@ -1,3 +1,6 @@
+v0.0402 2010-11-13 rurban
+no major changes to 0.04_01
+
 v0.04_01 2010-11-12 rurban
 
 make amd64 non-threaded work again (old absolute save_plop)

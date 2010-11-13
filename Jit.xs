@@ -130,7 +130,7 @@ threaded, same logic as above, just:
 #define PUSH_SIZE  4				/* size for the push instruction arg 4/8 */
 
 #define PUSHabs(what) memcpy(code,what,PUSH_SIZE); code += PUSH_SIZE
-#define PUSHrel(what) memcpy(code,what,MOV_SIZE); code += MOV_SIZE
+#define PUSHrel(what) memcpy(code,what,MOV_SIZE);  code += MOV_SIZE
 #define revword(m)	(((unsigned int)m)&0xff),((((unsigned int)m)&0xff00)>>8), \
         ((((unsigned int)m)&0xff0000)>>16),((((unsigned int)m)&0xff000000)>>24)
 #define absword(m)	((((unsigned int)m)&0xff000000)>>24), \
@@ -150,6 +150,9 @@ T_CHARARR NOP[]      = {0x90};    /* nop */
 
 #define push_imm_0	0x68
 #define push_imm(m)	0x68,revword(m)
+#define push_arg1_mem   push_imm_0
+#define push_arg2_mem   push_imm_0
+
 /* mov    $memabs,%eax PL_op in eax */
 #define mov_mem_eax(m)	0xa1,revword(m)
 /* mov    $memabs,%ebx &PL_op in ebx */
@@ -238,6 +241,8 @@ T_CHARARR NOP[]      = {0x90};    /* nop */
 #define push_imm(m)	0x68,revword(m)
 #define mom_mem_esi     0xbe		/* arg2 */
 #define mom_mem_edi     0xbf		/* arg1 */
+#define push_arg1_mem   mom_mem_edi	/* if call via register */
+#define push_arg2_mem   mom_mem_esi
 
 #define mov_rbx_rdi     0x48,0x89,0xdf /* my_perl => arg1 */
 #define mov_rebx_mem    0x48,0x89,0x1d /* movq (%ebx), &PL_op */
@@ -456,17 +461,19 @@ jit_chain(pTHX_
 	    opname = (char*)PL_op_name[op->op_type];
 	    DEBUG_v( printf("# pp_%s \t= 0x%x / 0x%x\n", opname, op->op_ppaddr, op));
 	}
-# if defined(JIT_CPU_X86) && defined(DEBUG_s_TEST_)
+# if defined(DEBUG_s_TEST_)
         if (DEBUG_s_TEST_) {
-            unsigned char push_imm[] = { push_imm_0 };
+#  ifdef USE_ITHREADS
+            T_CHARARR push_arg1[] = { push_arg1_mem };
+#  endif
             if (dryrun) {
 #  ifdef USE_ITHREADS
-                size += sizeof(push_imm); size += CALL_SIZE;
+                size += sizeof(push_arg1); size += CALL_SIZE;
 #  endif
                 size += sizeof(CALL); size += CALL_SIZE;
             } else {
 #  ifdef USE_ITHREADS
-                PUSHc(push_imm);
+                PUSHc(push_arg1);
                 PUSHabs(&my_perl);
 #  endif
                 CALL_ABS(&Perl_debstack);
@@ -477,33 +484,28 @@ jit_chain(pTHX_
             }
         }
         if (DEBUG_t_TEST_) {
-            unsigned char push_imm[] = { push_imm_0 };
-#  ifdef JIT_CPU_AMD64
-            unsigned char mov_mem_edi[] = { mov_mem_edi };
-            unsigned char mov_mem_esi[] = { mov_mem_esi };
+            T_CHARARR push_arg1[] = { push_arg1_mem };
+#  ifdef USE_ITHREADS
+            T_CHARARR push_arg2[] = { push_arg2_mem };
 #  endif
             if (dryrun) {
-                size += sizeof(push_imm); size += CALL_SIZE;
+                size += sizeof(push_arg1); size += CALL_SIZE;
 #  ifdef USE_ITHREADS
-                size += sizeof(push_imm); size += CALL_SIZE;
-#  endif
-#  ifdef JIT_CPU_AMD64
-                size += 5;
+                size += sizeof(push_arg2); size += CALL_SIZE;
 #  endif
                 size += sizeof(CALL); size += CALL_SIZE;
             } else {
                 if (op) {
-                PUSHc(push_imm);
-                PUSHabs(op);
-#  ifdef JIT_CPU_AMD64
-                PUSHc(mov_mem_edi);
-                PUSHabs(op);
-#  endif
 #  ifdef USE_ITHREADS
-                PUSHc(push_imm);
-                PUSHabs(&my_perl);
+                    PUSHc(push_arg2);
+                    PUSHabs(op);
+                    PUSHc(push_arg1);
+                    PUSHabs(&my_perl);
+#  else
+                    PUSHc(push_arg1);
+                    PUSHabs(op);
 #  endif
-                CALL_ABS(&Perl_debop);
+                    CALL_ABS(&Perl_debop);
                 }
 #  if defined(__GNUC__)
                 fprintf(stabs, ".stabn 68,0,%d,%d /* Perl_debop(PL_op) */\n",
