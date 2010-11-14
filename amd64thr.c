@@ -59,7 +59,7 @@ T_CHARARR amd64thr_epilog[] = {
 #define mov_rax_8rbx 	0x48,0x89,0x43,0x08
 
 T_CHARARR amd64thr_call[]  = {
-    mov_rbx_rdi,	/* mov    %rbx,%rdi ; my_perl => arg1 */
+    mov_rbx_arg1,	/* mov    %rbx,%rdi ; my_perl => arg1 */
     call};      	/* callq near offset $PL_op->op_ppaddr */
 T_CHARARR amd64thr_jmp[]   = {0xff,0x25}; /* jmp *$PL_op->op_ppaddr */
 T_CHARARR amd64thr_save_plop[]  = { /* save new PL_op into my_perl */
@@ -79,11 +79,10 @@ T_CHARARR amd64thr_dispatch[] = {
     0xFF,0x25};
 T_CHARARR amd64thr_dispatch_post[] = {0x31,0xdb};
 
-#define mov_rbx_rdi 	0x48,0x89,0xdf
 #define mov_rrax_r12	0x4c,0x8b,0x20
 
 T_CHARARR maybranch_plop[] = {
-    mov_rbx_rdi,
+    mov_rbx_arg1,
     mov_rax_8rbx,
     mov_rrax_r12
 };

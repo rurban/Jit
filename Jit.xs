@@ -3,8 +3,8 @@
  *    JIT (Just-in-time compile) the Perl5 runloop.
  *    Currently for x86 32bit, amd64 64bit. More CPU's later.
  *    Status:
- *      Works only for simple i386 and amd64, 
- *      without PERL_ASYNC_CHECK
+ *      Works only for simple i386 and amd64 (amd64 threaded fails), 
+ *      without PERL_ASYNC_CHECK,
  *      without maybranch ops (return op_other, op_last, ... ignored)
  *
  *    Copyright (C) 2010 by Reini Urban
@@ -43,14 +43,13 @@ long jit_chain(pTHX_ OP* op, unsigned char *code, unsigned char *code_start
 #endif
               );
 
-
 /* When do we need PERL_ASYNC_CHECK?
  * Until 5.13.2 we had it after each and every op,
  * since 5.13.2 only inside certain ops,
  * which need to handle pending signals.
  * In 5.6 it was a NOOP.
  */
-#define BYPASS_DISPATCH_NEEDED /* not tested yet */
+#define BYPASS_DISPATCH /* not tested yet */
 #if (PERL_VERSION > 6) && (PERL_VERSION < 13)
 #define HAVE_DISPATCH
 #define DISPATCH_NEEDED(op) dispatch_needed(op)
@@ -241,18 +240,32 @@ T_CHARARR NOP[]      = {0x90};    /* nop */
 #define mov_mem_eax(m)	0xa1,revword(m)
 /* mov    $memabs,(%ebx) &PL_op in ebx */
 #define mov_mem_rbx     0x48,0x8b,0x1d /* mov &PL_op,%rbx */
-#define mov_mem_ecx	0x8b,0x0d      /* &PL_sig_pending */
 #define mov_rebp_ebx(byte) 0x8b,0x5d,byte  /* mov 0x8(%ebp),%ebx*/
 #define mov_rrsp_rbx    0x48,0x8b,0x1c,0x24    /* mov    (%rsp),%rbx ; my_perl from stack to rbx */
 
 #define push_imm_0	0x68
 #define push_imm(m)	0x68,revword(m)
-#define mom_mem_esi     0xbe		/* arg2 */
-#define mom_mem_edi     0xbf		/* arg1 */
-#define push_arg1_mem   mom_mem_edi	/* if call via register */
-#define push_arg2_mem   mom_mem_esi
+/* gcc __fastcall amd64 convention for param 1-2 passing */
+#define mov_mem_esi     0xbe		/* arg2 */
+#define mov_mem_edi     0xbf		/* arg1 */
+#define mov_mem_ecx	0xb9      	/* arg1 */
+#ifndef _WIN64
+#define push_arg1_mem   mov_mem_edi	/* if call via register */
+#define push_arg2_mem   mov_mem_esi
+#else
+/* Win64 Visual C __fastcall uses rcx,rdx for the first int args, not rdi,rsi
+   We use less than 2GB for our vars and subs.
+ */
+#define mov_mem_edx     0xba		/* arg2 */
+#define push_arg1_mem   mov_mem_ecx	/* if call via register */
+#define push_arg2_mem   mov_mem_edx
+#endif
 
-#define mov_rbx_rdi     0x48,0x89,0xdf /* my_perl => arg1 */
+#ifndef _WIN64
+#define mov_rbx_arg1   0x48,0x89,0xdf /* my_perl => arg1 in rdi */
+#else
+#define mov_rbx_arg1   0x48,0x89,0xdf /* my_perl => arg1 in rcx */
+#endif
 #define mov_rebx_mem    0x48,0x89,0x1d /* movq (%ebx), &PL_op */
 #define mov_mem_rebx	0x48,0xc7,0x03 /* movq &PL_op, (%ebx) */
 #define mov_eax_rebx	0x89,0x03      /* movq %rax,(%rbx) &PL_op in ebx */
@@ -343,7 +356,7 @@ mytime() {
 
 int
 dispatch_needed(OP* op) {
-#ifdef BYPASS_DISPATCH_NEEDED
+#ifdef BYPASS_DISPATCH
     return 0; 			/* for TESTING only */
 #endif
     switch (op->op_type) {	/* sync this list with B::CC */

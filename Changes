@@ -1,3 +1,9 @@
+v0.04_03 2010-11-13 rurban
+
+fix tests for Win cmd.exe shell. Tested ok on strawberry and ActivePerl 5.8
+started work on WIN64 calling conventions (no test system yet).
+  rcx is not safe to use on amd64 for &PL_sig_pending
+
 v0.04_02 2010-11-13 rurban
 
 fixed -Dt for amd64
