@@ -5,7 +5,7 @@ my $DEBUGGING = $Config{ccflags} =~ /-DDEBUGGING/;
 my $thr = $Config{useithreads};
 #$c .= " -Dv" if $DEBUGGING;
 
-$p = q( -e 'sub f{die "ok 1"}; f; print "not ok 1"');
+$p = q( -e "sub f{die q(ok 1)}; f; print q(not ok 1)");
 print "# gdb --args $c $p\n";
 $r = `$c $p`;
 if ($r =~ /ok 1/m) {
