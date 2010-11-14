@@ -7,7 +7,7 @@ my $script = "benchtest.pl";
 open F, ">", $script;
 print F 'my $a=1; my $b=6;',"\n";
 for (1..1000) { print F '$a += $b*2 - 3; $b -= 1;',"\n"};
-print F 'print $a;',"\n";
+print F 'print "$a\n";',"\n";
 close F;
 
 my $c = "time $X -Mblib -MJit $script";
