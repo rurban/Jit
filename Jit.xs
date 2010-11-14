@@ -130,7 +130,7 @@ threaded, same logic as above, just:
 #define PUSHcall(what) memcpy(code,&what,CALL_SIZE); code += CALL_SIZE
 
 /* __amd64 defines __x86_64 */
-#if defined(__x86_64__) || defined(__amd64)
+#if defined(__x86_64__) || defined(__amd64) || defined(__amd64__) || defined(_M_X64)
 #define JIT_CPU "amd64"
 #define JIT_CPU_AMD64
 #define CALL_ALIGN 0
@@ -175,7 +175,7 @@ T_CHARARR NOP[]      = {0x90};    /* nop */
 #define mov_mem_esi     0xbe		/* arg2 */
 #define mov_mem_edi     0xbf		/* arg1 */
 #define mov_mem_ecx	0xb9      	/* arg1 */
-#ifndef WIN64
+#ifndef _WIN64
 #define push_arg1_mem   mov_mem_edi	/* if call via register */
 #define push_arg2_mem   mov_mem_esi
 #else
@@ -187,7 +187,7 @@ T_CHARARR NOP[]      = {0x90};    /* nop */
 #define push_arg2_mem   mov_mem_edx
 #endif
 
-#ifndef WIN64
+#ifndef _WIN64
 #define mov_rbx_arg1   0x48,0x89,0xdf /* my_perl => arg1 in rdi */
 #else
 #define mov_rbx_arg1   0x48,0x89,0xdf /* my_perl => arg1 in rcx */
@@ -309,7 +309,14 @@ T_CHARARR NOP[]      = {0x90};    /* nop */
 #endif
 #endif
 
+#if defined(__ia64__) || defined(__ia64) || defined(_M_IA64)
+#error "IA64 not supported so far"
+#endif
 #if defined(__sparcv9)
+#error "SPARC V9 not supported so far"
+#endif
+#if defined(__arm__)
+#error "ARM or THUMB not supported so far"
 #endif
 
 #ifndef JIT_CPU
