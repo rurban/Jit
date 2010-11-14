@@ -897,7 +897,7 @@ Perl_runops_jit(pTHX)
     /* XXX Missing. Prepare for execution: flush CPU cache. Needed only on ppc32 and ppc64 */
 
     /* gdb: disassemble code code+200 */
-#ifdef DEBUGGING
+#if defined(DEBUGGING) && defined(DEBUG_v_TEST)
     if (DEBUG_v_TEST) {
         DEBUG_v( printf("# &PL_op   \t= 0x%x / *0x%x\n",&PL_op, PL_op) );
 #ifdef USE_ITHREADS

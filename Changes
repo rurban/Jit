@@ -1,9 +1,10 @@
-v0.04_03 2010-11-13 rurban
+v0.04_03 2010-11-14 rurban
 
 fix tests for Win cmd.exe shell. Tested ok on strawberry and ActivePerl 5.8
 started work on WIN64 calling conventions (no test system yet).
   rcx is not safe to use on amd64 for &PL_sig_pending
-fix solaris 10 / cc 32-bit
+fixed solaris 10 / cc 32-bit
+fixed perl5.6.2 (check old macros)
 
 v0.04_02 2010-11-13 rurban
 
