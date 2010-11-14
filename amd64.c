@@ -119,7 +119,7 @@ T_CHARARR amd64_dispatch_getsig[] = {0x8b,0x0d};
 T_CHARARR amd64_dispatch[] = {
     0x85,0xc9,0x74,0x06,
     0xFF,0x25};
-T_CHARARR amd64_dispatch_post[] = {}; /* fails with msvc */
+/*T_CHARARR amd64_dispatch_post[] = {}; */ /* fails with msvc and sun cc */
 
 T_CHARARR maybranch_plop[] = {
     mov_mem_rebx, fourbyte,
@@ -155,7 +155,7 @@ push_gotorel(unsigned char *code, int label) {
 # define SAVE_PLOP	amd64_save_plop
 # define DISPATCH_GETSIG amd64_dispatch_getsig
 # define DISPATCH       amd64_dispatch
-# define DISPATCH_POST  amd64_dispatch_post
+/* # define DISPATCH_POST  amd64_dispatch_post */
 # define EPILOG         amd64_epilog
 # define MAYBRANCH_PLOP maybranch_plop
 # define GOTOREL        gotorel
