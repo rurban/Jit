@@ -1,14 +1,14 @@
 This perl5 jitter is super-simple, and modeled after B::CC
 
 The compiled perl5 optree is a linked list in memory in non-execution order,
-wide-spread jumps. Additionally the calls are indirect. The jitter properly
-aligns the run-time calls in linear linked-list "exec" order, so that the CPU
-can prefetch the next instructions, and it inlines some simple ops.
-op_next targets (returned by false conditions) are favored over op_other and
-other targets.
+wide-spread jumps. Additionally the calls are indirect with a shared
+libperl. The jitter properly aligns the run-time calls in linear linked-list
+"exec" order, so that the CPU can prefetch the next instructions, and it inlines
+some simple ops.  op_next targets (returned by false conditions) are favored
+over op_other and other targets.
 
 IT DOES NOT WORK YET!
-It does only work yet for non-threaded simple functions! No subs, no maybranch ops
+It does only work for simple functions! No maybranch ops
 
 Faster jitted execution path without runops loop, selected with -MJit or later,
 when stable with perl -j.
@@ -46,13 +46,8 @@ epilog:
 	5d               	pop    %ebp
 	c3                   	ret
 
-If op maybranch (Opcodes-0.04), create call of other op, check PL_op before with after 
-and branch to label of other op.
-
-Problems
-far calls to the pp ops break code prefetching, so we have to inline as much as 
-possible, similar to B::CC. Easy to jit are only nextstate, enter, and skip null.
-The best jitter would be a B::CC to assembler backend, but this is hard to get right.
+If op maybranch (see also Opcodes-0.04), jit the other op branches, 
+check PL_op before with after and branch to label of other op.
 
 Porting
 I created the asm with cc_main and cc_main_nt, see Makefile for objdump and cc_harness 
