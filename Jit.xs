@@ -843,6 +843,13 @@ Perl_runops_jit(pTHX)
     PUSHc(EPILOG);
     while (((unsigned int)&code | 0xfffffff0) % 4) { *(code++) = NOP[0]; }
 
+#ifdef PROFILING
+    if (profiling) {
+        printf("jit pass 2:\t%0.12f\n", mytime() - bench);
+        bench = mytime();
+    }
+#endif
+
 #ifdef DEBUGGING
     fprintf(fh, "}\n");
     line++;
@@ -874,22 +881,41 @@ Perl_runops_jit(pTHX)
 
     /* gdb: disassemble code code+200 */
 #ifdef DEBUGGING
-    DEBUG_v( printf("# &PL_op   \t= 0x%x / *0x%x\n",&PL_op, PL_op) );
+    if (DEBUG_v_TEST) {
+        DEBUG_v( printf("# &PL_op   \t= 0x%x / *0x%x\n",&PL_op, PL_op) );
 #ifdef USE_ITHREADS
-    DEBUG_v( printf("# &my_perl \t= 0x%x / *0x%x\n",&my_perl, my_perl) );
+        DEBUG_v( printf("# &my_perl \t= 0x%x / *0x%x\n",&my_perl, my_perl) );
 #endif
-    DEBUG_v( printf("# code() 0x%x size %d",code,size) );
-    for (i=0; i < size; i++) {
-        if (!(i % 8)) DEBUG_v( printf("\n#(code+%3d): ", i) );
-        DEBUG_v( printf("%02x ",code[i]) );
+        DEBUG_v( printf("# code() 0x%x size %d",code,size) );
+        for (i=0; i < size; i++) {
+            if (!(i % 8)) DEBUG_v( printf("\n#(code+%3d): ", i) );
+            DEBUG_v( printf("%02x ",code[i]) );
+        }
+        DEBUG_v( printf("\n# runops_jit_%d\n", global_loops-1) );
     }
-    DEBUG_v( printf("\n# runops_jit_%d\n", global_loops-1) );
+
+    /* How to disassemble per command line:
+       echo "55 89 e5 53 51 83 ec 08" |xxd -r -p - > xx
+       objdump -D --target=binary --architecture i386:intel xx
+
+   0:   55                      push   ebp
+   1:   89 e5                   mov    ebp,esp
+   3:   53                      push   ebx
+   4:   51                      push   ecx
+   5:   83 ec 08                sub    esp,0x8
+
+     */
+    if (DEBUG_v_TEST) {
+        fh = fopen("run-jit.bin", "w");
+        fwrite(code,size,1,fh);
+        fclose(fh);
+        system("objdump -D --target=binary --architecture i386"
+#ifdef JIT_CPU_AMD64
+               ":x86-64"
 #endif
-#ifdef PROFILING
-    if (profiling) {
-        printf("jit pass 2:\t%0.12f\n", mytime() - bench);
-        bench = mytime();
+               " run-jit.bin");
     }
+
 #endif
 
 /*================= Jit.xs:859 runops_jit_0 == disassemble code code+40 =====*/
