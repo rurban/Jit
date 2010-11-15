@@ -73,8 +73,8 @@ T_CHARARR amd64_prolog[] = {
     push_rcx,
 #endif
     push_r12, 		/* op->next */
-    sub_x_rsp(8),
-    mov_mem_rbx, fourbyte
+    sub_x_rsp(8)/*,
+    mov_mem_rbx, fourbyte*/
 #ifdef HAVE_DISPATCH	/* &PL_sig_pending */
     ,mov_mem_ecx, fourbyte
 #endif
@@ -89,11 +89,11 @@ unsigned char *push_prolog(unsigned char *code) {
 	push_rcx,
 #endif
         push_r12,
-	sub_x_rsp(8),
-	mov_mem_rbx
+	sub_x_rsp(8)/*,
+        mov_mem_rbx*/
     };
     PUSHc(prolog1);
-    PUSHrel(&PL_op);
+    /*PUSHrel(&PL_op);*/
 #ifdef HAVE_DISPATCH
     T_CHARARR prolog2[] = {
 	mov_mem_ecx};
@@ -161,13 +161,14 @@ push_maybranch_check(unsigned char *code, int next) {
 }
 
 T_CHARARR gotorel[] = {
-    jmp(0)
+    0xe9, fourbyte
 };
 unsigned char *
-push_gotorel(unsigned char *code, int label) {
+push_gotorel(unsigned char *code, U32 label) {
     unsigned char gotorel[] = {
-	jmp(label)};
+	0xe9};
     PUSHc(gotorel);
+    PUSHabs(&label);
     return code;
 }
 

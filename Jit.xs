@@ -248,7 +248,8 @@ T_CHARARR NOP[]      = {0x90};    /* nop */
 
 #define call 		0xe8	    /* + 4 rel */
 #define ljmp(abs) 	0xff,0x25   /* + 4 memabs */
-#define jmp(byte)       0x3b,(byte) /* maybranch, untested */
+#define jmpq	        0xe9        /* fourbyte */
+
 
 #define mov_mem_r12	0x41,0xbc 	/* movq PL_op->next, %r12 */
 #define mov_eax_4ebp 	0x89,0x45,0xfc
@@ -715,11 +716,11 @@ jit_chain(pTHX_
                     other = JIT_CHAIN(logop->op_other, NULL, NULL); /* sizeof other */
                     other += sizeof(GOTOREL);
                     code = push_maybranch_check(code, other); /* if cmp: je => next */
-                    DEBUG_v( printf("# other: %s\tsize=%x\n", PL_op_name[logop->op_other->op_type], other));
+                    DEBUG_v( printf("# other_%d: %s\tsize=%x\n", global_loops, PL_op_name[logop->op_other->op_type], other));
                     code = (unsigned char*)JIT_CHAIN(logop->op_other, code, code_start);
                     dbg_lines1("goto branch_%d;", global_loops);
                     next = JIT_CHAIN(logop->op_next, NULL, NULL);  /* sizeof next */
-                    DEBUG_v( printf("# next_5d: %s\tsize=%x\n", PL_op_name[logop->op_next->op_type], next));
+                    DEBUG_v( printf("# next_%d: %s\tsize=%x\n", global_loops, PL_op_name[logop->op_next->op_type], next));
                     code = push_gotorel(code, next);
                     dbg_lines1("next_%d:", global_loops);
                     next = JIT_CHAIN(logop->op_next, code, code_start);
@@ -1015,7 +1016,7 @@ Perl_runops_jit(pTHX)
 
 /*================= Jit.xs:859 runops_jit_0 == disassemble code code+40 =====*/
     (*((void (*)(pTHX))code))(aTHX);
-/*================= runops_jit =================================*/
+/*================= runops_jit ==============================================*/
     DEBUG_l(Perl_deb(aTHX_ "leaving RUNOPS JIT level\n"));
 #ifdef PROFILING
     if (profiling) {
