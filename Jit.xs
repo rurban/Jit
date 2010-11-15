@@ -44,12 +44,14 @@ long jit_chain(pTHX_ OP* op, unsigned char *code, unsigned char *code_start
               );
 
 /* When do we need PERL_ASYNC_CHECK?
+ * if (dispatch_needed(op)) if (PL_sig_pending) Perl_despatch_signals();
+ *
  * Until 5.13.2 we had it after each and every op,
  * since 5.13.2 only inside certain ops,
- * which need to handle pending signals.
+ *   which need to handle pending signals.
  * In 5.6 it was a NOOP.
  */
-#define BYPASS_DISPATCH /* not tested yet */
+/*#define BYPASS_DISPATCH */ /* currently in test */
 #if (PERL_VERSION > 6) && (PERL_VERSION < 13)
 #define HAVE_DISPATCH
 #define DISPATCH_NEEDED(op) dispatch_needed(op)
@@ -225,7 +227,6 @@ T_CHARARR NOP[]      = {0x90};    /* nop */
 #define test_eax_eax    0x85,0xc0
 #define je(byte)        0x74,(byte)
 /* skip call	_Perl_despatch_signals */
-#define je_5            0x74,0x05
 
 #ifdef USE_ITHREADS
 # include "amd64thr.c"
@@ -270,9 +271,14 @@ T_CHARARR NOP[]      = {0x90};    /* nop */
 #define mov_mem_eax(m)	0xa1,revword(m)
 /* mov    $memabs,%ebx &PL_op in ebx */
 #define mov_mem_ebx(m)	0xbb,revword(m)
+#define mov_mem_ecx(m)	0xb9,revword(m)
 /* &PL_sig_pending in -4(%ebp) */
-#define mov_mem_4ebp(m)	0xc7,0x45,0xfc,absword(m)
-#define mov_mem_recx 	0x8b,0x0d
+#define mov_mem_4ebp(m)	0xc7,0x45,0xfc,revword(m)
+/*#define mov_mem_ecx 	0x8b,0x0d*/
+#define mov_4ebp_edx	0x8b,0x55,0xfc
+#define mov_redx_eax	0x8b,0x02
+#define test_eax_eax    0x85,0xc0
+#define je(byte) 	0x74,(byte)
 #define mov_rebp_ebx(byte) 0x8b,0x5d,byte  /* mov 0x8(%ebp),%ebx*/
 
 /* EPILOG */
@@ -294,13 +300,6 @@ T_CHARARR NOP[]      = {0x90};    /* nop */
 #define ljmp(abs) 	0xff,0x25   /* + 4 memabs */
 #define mov_eax_mem 	0xa3	    /* + 4 memabs */
 #define jmp(byte)       0x3b,(byte) /* maybranch */
-
-#define mov_4ebp_edx    0x8b,0x55,0xfc
-#define mov_redx_eax    0x82,0x02
-#define test_eax_eax    0x85,0xc0
-#define je(byte)        0x74,(byte)
-/* skip call	_Perl_despatch_signals */
-#define je_5            0x74,0x05
 
 #ifdef USE_ITHREADS
 # include "i386thr.c"
@@ -471,7 +470,7 @@ jit_chain(pTHX_
     int dryrun = !code;
     int size = 0;
 #ifdef DEBUGGING
-    static int line = 0;
+    static int line = 3;
     char *opname;
 
     if (!dryrun) {
@@ -584,6 +583,7 @@ jit_chain(pTHX_
 #endif
 	}
 
+#ifdef HAVE_DISPATCH
 	if (DISPATCH_NEEDED(op)) {
 #ifdef DEBUGGING
 	    if (!dryrun) {
@@ -598,26 +598,26 @@ jit_chain(pTHX_
 # endif
 	    }
 #endif
-#ifdef HAVE_DISPATCH
 # ifndef USE_ITHREADS
+#  ifdef DISPATCH_GETSIG
 	    if (dryrun) {
 		size += sizeof(DISPATCH_GETSIG);
 		size += MOV_SIZE;
 	    } else {
 		PUSHc(DISPATCH_GETSIG);
 		PUSHrel(&PL_sig_pending);
-#  if defined(DEBUGGING) && defined(__GNUC__)
-		fprintf(stabs, ".stabn 68,0,%d,%d /* Perl_despatch_signals() */\n",
-			++line, code-code_start);
-#  endif
 	    }
+#  endif
 # endif
 	    if (dryrun) {
-		size += sizeof(DISPATCH);
-		size += MOV_SIZE;
+		size += sizeof(DISPATCH) + sizeof(CALL) + CALL_SIZE;
 	    } else {
 		PUSHc(DISPATCH);
-		PUSHrel(&Perl_despatch_signals);
+		CALL_ABS(&Perl_despatch_signals);
+#   if defined(DEBUGGING) && defined(__GNUC__)
+		fprintf(stabs, ".stabn 68,0,%d,%d /* Perl_despatch_signals() */\n",
+			++line, code-code_start);
+#   endif
 	    }
 # if defined(USE_ITHREADS) && defined(DISPATCH_POST)
 	    if (dryrun) {
@@ -626,15 +626,14 @@ jit_chain(pTHX_
 		PUSHc(DISPATCH_POST);
 	    }
 # endif
-#endif
         }
+#endif
 
         /* other before next */
 	if (maybranch(op)) {
             int label;
 	    if (dryrun) {
-		size += sizeof(maybranch_plop);
-		size += sizeof(CALL); size += CALL_SIZE;
+		size += sizeof(maybranch_plop) + sizeof(CALL) + CALL_SIZE;
 	    } else {
 		code = push_maybranch_plop(code);
 		CALL_ABS(op->op_ppaddr);
@@ -733,10 +732,7 @@ Perl_runops_jit(pTHX)
 #endif
     U32 rel; /* 4 byte int */
     unsigned char *code, *code_start;
-#if !defined(MOV_REL) && !defined(USE_ITHREADS)
-    void *PL_op_ptr = &PL_op;
-#endif
-    OP * root;
+    OP *root;
     int pagesize = 4096, size = 0;
 #ifdef PROFILING
     SV *sv_prof;

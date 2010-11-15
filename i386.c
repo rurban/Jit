@@ -13,7 +13,7 @@ dispatch_getsig:
 	8b 0d xx xx xx xx	mov    $PL_sig_pending,%ecx
 dispatch:
 	85 c9                	test   %ecx,%ecx
-	74 06                	je     +6
+	74 06                	je     +5
 	e8 xx xx xx xx          call   *Perl_despatch_signals #relative
 
 
@@ -31,12 +31,12 @@ T_CHARARR x86_prolog[] = {
     push_ebp,		/* save frame pointer */	
     mov_esp_ebp,	/* set new frame pointer */
     push_ebx,		/* &PL_op  */
+    push_ecx,
+    sub_x_esp(8),
+    mov_mem_ebx(0)
 #ifdef HAVE_DISPATCH
-    push_ecx,		/* &PL_sig_pending */
-    sub_x_esp(8),	/* room for 2 locals: &PL_sig_pending and op */
+    ,mov_mem_4ebp(0)
 #endif
-    mov_mem_ebx(0)    	/* &PL_op to ebx */
-    /*,mov_mem_4ebp(0)*/    /* &PL_sig_pending to -4(%ebp) */
 };
 
 unsigned char * push_prolog(unsigned char *code) {
@@ -44,15 +44,13 @@ unsigned char * push_prolog(unsigned char *code) {
         push_ebp,
         mov_esp_ebp,
         push_ebx,	/* &PL_op */
-#ifdef HAVE_DISPATCH
-        push_ecx,	/* &PL_sig_pending */
+        push_ecx,
         sub_x_esp(8),
-#endif
         mov_mem_ebx(&PL_op)
-#if 0
-	,mov_mem_4ebp(&PL_sig_pending)
+#ifdef HAVE_DISPATCH
+        ,mov_mem_4ebp(&PL_sig_pending)
 #endif
- };
+    };
     PUSHc(prolog);
     return code;
 }
@@ -60,8 +58,8 @@ unsigned char * push_prolog(unsigned char *code) {
 T_CHARARR x86_epilog[] = {
 #ifdef HAVE_DISPATCH
     add_x_esp(8),
-    pop_ecx,
 #endif
+    pop_ecx,
     pop_ebx,
     leave,		/* restore esp */
     ret
@@ -70,18 +68,15 @@ T_CHARARR x86_epilog[] = {
 T_CHARARR x86_call[]  = {0xe8};      	/* call near offset $PL_op->op_ppaddr */
 T_CHARARR x86_jmp[]   = {0xff,0x25}; 	/* jmp *$PL_op->op_ppaddr */
 T_CHARARR x86_save_plop[]  = {
-    /*mov_eax_8ebp*/			/* &PL_op in -8(%ebp) */
     mov_eax_rebx			/* &PL_op in %ebx */
 };
-T_CHARARR x86_dispatch_getsig[] = {
-    0x8b,0x0d		/* mov $PL_sig_pending,%ecx */
-}; /* &PL_sig_pending abs */
 T_CHARARR x86_dispatch[] = {
-    0x85,0xc9,	/* test   %ecx,%ecx */
-    0x74,0x06,  /* je     +6 */
-    0xe8};      /* call   Perl_despatch_signals */
+    mov_4ebp_edx,
+    mov_redx_eax,
+    test_eax_eax,
+    je(5)  		/* je     +5 */
+};      		/* call   Perl_despatch_signals */
 /* &Perl_despatch_signals relative */
-T_CHARARR x86_dispatch_post[] = {}; /* fails with msvc */
 
 /* XXX TODO */
 T_CHARARR maybranch_plop[] = {
@@ -113,9 +108,7 @@ push_gotorel(unsigned char *code, int label) {
 # define CALL	 	x86_call
 # define JMP	 	x86_jmp
 # define SAVE_PLOP	x86_save_plop
-# define DISPATCH_GETSIG x86_dispatch_getsig
 # define DISPATCH       x86_dispatch
-# define DISPATCH_POST  x86_dispatch_post
 # define MAYBRANCH_PLOP maybranch_plop
 # define GOTOREL        gotorel
 
