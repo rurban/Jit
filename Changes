@@ -1,3 +1,8 @@
+v0.04_04 2010-11-15 rurban
+
+enabled HAVE_DISPATCH on i386, tested ok on i386 threaded and unthreaded.
+on amd64 untested.
+
 v0.04_03 2010-11-14 rurban
 
 fix tests for Win cmd.exe shell. Tested ok on strawberry and ActivePerl 5.8

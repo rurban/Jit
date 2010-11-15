@@ -51,7 +51,7 @@ long jit_chain(pTHX_ OP* op, unsigned char *code, unsigned char *code_start
  *   which need to handle pending signals.
  * In 5.6 it was a NOOP.
  */
-/*#define BYPASS_DISPATCH */ /* currently in test */
+/*#define BYPASS_DISPATCH */ /* test ok on i386, not yet tested on amd64 */
 #if (PERL_VERSION > 6) && (PERL_VERSION < 13)
 #define HAVE_DISPATCH
 #define DISPATCH_NEEDED(op) dispatch_needed(op)
@@ -138,6 +138,9 @@ threaded, same logic as above, just:
 #define CALL_ALIGN 0
 #define MOV_REL
 #define PUSH_SIZE  4				/* size for the push instruction arg 4/8 */
+
+/* yet untested! */
+#define BYPASS_DISPATCH
 
 #define PUSHabs(what) memcpy(code,what,PUSH_SIZE); code += PUSH_SIZE
 #define PUSHrel(where) { \
