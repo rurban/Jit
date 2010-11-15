@@ -81,58 +81,12 @@ T_CHARARR x86_dispatch[] = {
     je(5)  		/* je     +5 */
 };      		/* call   Perl_despatch_signals */
 
-/* XXX TODO cmp returned op == op->next => jmp */
-T_CHARARR maybranch_plop[] = {
-    mov_mem_ecx(0)
-    /*mov_eax_8ebp,*/
-};
-unsigned char *
-push_maybranch_plop(unsigned char *code, OP* next) {
-    unsigned char maybranch_plop[] = {
-	mov_mem_ecx_0};
-    PUSHc(maybranch_plop);
-    PUSHrel(next);
-    return code;
-}
-T_CHARARR maybranch_check[] = {
-    cmp_ecx_eax,
-    je(0)
-};
-unsigned char *
-push_maybranch_check(unsigned char *code, int next) {
-    unsigned char maybranch_check[] = {
-	cmp_ecx_eax,
-	je_0};
-    if (abs(next) > 128) {
-        printf("ERROR: je overflow %d > 128\n", next);
-    } else {
-        PUSHc(maybranch_check);
-        PUSHbyte(next);
-    }
-    return code;
-}
-
-T_CHARARR gotorel[] = {
-	jmp(0)
-};
-unsigned char *
-push_gotorel(unsigned char *code, int label) {
-    unsigned char gotorel[] = {
-	jmp(label)};
-    PUSHc(gotorel);
-    return code;
-}
-
-
 # define PROLOG 	x86_prolog
 # define EPILOG         x86_epilog
 # define CALL	 	x86_call
 # define JMP	 	x86_jmp
 # define SAVE_PLOP	x86_save_plop
 # define DISPATCH       x86_dispatch
-# define MAYBRANCH_PLOP maybranch_plop
-# define GOTOREL        gotorel
-
 
 /*
  * Local variables:

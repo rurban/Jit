@@ -92,30 +92,6 @@ T_CHARARR x86thr_dispatch_post[] = {
     0x53,0x90
 };
 
-/* XXX TODO */
-T_CHARARR maybranch_plop[] = {
-    mov_mem_ebx(0),
-    mov_eax_8ebp
-};
-unsigned char *
-push_maybranch_plop(unsigned char *code) {
-    unsigned char maybranch_plop[] = {
-	mov_mem_ebx(&PL_op),
-	mov_eax_8ebp};
-    PUSHc(maybranch_plop);
-    return code;
-}
-T_CHARARR gotorel[] = {
-	jmp(0)
-};
-unsigned char *
-push_gotorel(unsigned char *code, int label) {
-    unsigned char gotorel[] = {
-	jmp(label)};
-    PUSHc(gotorel);
-    return code;
-}
-
 # define PROLOG 	x86thr_prolog
 # define CALL	 	x86thr_call
 # define JMP	 	x86thr_call
@@ -124,8 +100,6 @@ push_gotorel(unsigned char *code, int label) {
 # define DISPATCH       x86thr_dispatch
 # define DISPATCH_POST  x86thr_dispatch_post
 # define EPILOG         x86thr_epilog
-# define MAYBRANCH_PLOP maybranch_plop
-# define GOTOREL        gotorel
 
 /*
  * Local variables:

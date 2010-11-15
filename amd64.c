@@ -69,11 +69,14 @@ T_CHARARR amd64_prolog[] = {
     push_rbp,
     mov_rsp_rbp,
     push_rbx, 		/* &PL_op */
+#ifdef HAVE_DISPATCH
+    push_rcx,
+#endif
+    push_r12, 		/* op->next */
     sub_x_rsp(8),
     mov_mem_rbx, fourbyte
 #ifdef HAVE_DISPATCH	/* &PL_sig_pending */
-    ,push_rcx,
-    mov_mem_ecx, fourbyte
+    ,mov_mem_ecx, fourbyte
 #endif
 };
 
@@ -82,6 +85,10 @@ unsigned char *push_prolog(unsigned char *code) {
 	push_rbp,
         mov_rsp_rbp,
 	push_rbx, 	/* for &PL_op */
+#ifdef HAVE_DISPATCH
+	push_rcx,
+#endif
+        push_r12,
 	sub_x_rsp(8),
 	mov_mem_rbx
     };
@@ -89,7 +96,6 @@ unsigned char *push_prolog(unsigned char *code) {
     PUSHrel(&PL_op);
 #ifdef HAVE_DISPATCH
     T_CHARARR prolog2[] = {
-	push_rcx, 
 	mov_mem_ecx};
     PUSHc(prolog2);
     PUSHrel(&PL_sig_pending);
@@ -97,11 +103,12 @@ unsigned char *push_prolog(unsigned char *code) {
     return code;
 }
 T_CHARARR amd64_epilog[] = {
+    add_x_esp(8),
+    pop_r12,
 #ifdef HAVE_DISPATCH
     pop_rcx,
 #endif
     pop_rbx,
-    add_x_esp(8),
     leave,
     ret};
 
@@ -122,23 +129,39 @@ T_CHARARR amd64_dispatch[] = {
 /*T_CHARARR amd64_dispatch_post[] = {}; */ /* fails with msvc and sun cc */
 
 T_CHARARR maybranch_plop[] = {
-    mov_mem_rebx, fourbyte,
-    mov_eax_8ebp
+    mov_mem_r12, fourbyte
+    /*,mov_eax_8ebp*/
 };
-unsigned char *push_maybranch_plop(unsigned char *code) {
+unsigned char *push_maybranch_plop(unsigned char *code, OP* next) {
     T_CHARARR maybranch_plop1[] = {
-	mov_mem_rebx
-    };
-    T_CHARARR maybranch_plop2[] = {
-	mov_eax_8ebp
-    };
+	mov_mem_r12};
+    /*T_CHARARR maybranch_plop2[] = {
+	mov_eax_8ebp};*/
     PUSHc(maybranch_plop1);
-    PUSHrel(&PL_op);
-    PUSHc(maybranch_plop2);
+    PUSHabs(next);
+    /*PUSHc(maybranch_plop2);*/
     return code;
 }
+T_CHARARR maybranch_check[] = {
+    cmp_rax_r12,
+    je(0)
+};
+unsigned char *
+push_maybranch_check(unsigned char *code, int next) {
+    unsigned char maybranch_check[] = {
+	cmp_rax_r12,
+	je_0};
+    if (abs(next) > 128) {
+        printf("ERROR: je overflow %d > 128\n", next);
+    } else {
+        PUSHc(maybranch_check);
+        PUSHbyte(next);
+    }
+    return code;
+}
+
 T_CHARARR gotorel[] = {
-	jmp(0)
+    jmp(0)
 };
 unsigned char *
 push_gotorel(unsigned char *code, int label) {

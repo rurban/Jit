@@ -55,6 +55,7 @@ check_sig2:
 L3:
 	movl	_PL_op, %eax
 	cmpl	%ecx, %eax
+#	cmp	%r12, %rax
 	je	next_1
         
 # op_other block from if (if true)

@@ -4,12 +4,12 @@ use Config;
 my $c = qq($^X -Mblib -MJit);
 my $dbg = $Config{ccflags} =~ /-DDEBUGGING/;
 my $thr = $Config{useithreads};
-unless ($dbg) {
-  print "1..0 # SKIP maybranch not yet ready (only tested with DEBUGGING perl)\n";
-  exit;
-} else {
+#unless ($dbg) {
+#  print "1..0 # SKIP maybranch not yet ready (only tested with DEBUGGING perl)\n";
+#  exit;
+#} else {
   print "1..2\n";
-}
+#}
 
 my $p = q( -e 'my $a = 1; if ($a > 2) { die "nok ok 1\n"; } else { print q(ok); }' );
 $c .= " -Dv" if $dbg and $] > 5.008;

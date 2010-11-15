@@ -82,15 +82,34 @@ T_CHARARR amd64thr_dispatch_post[] = {0x31,0xdb};
 #define mov_rrax_r12	0x4c,0x8b,0x20
 
 T_CHARARR maybranch_plop[] = {
-    mov_rbx_arg1,
-    mov_rax_8rbx,
-    mov_rrax_r12
+    mov_mem_r12, fourbyte
 };
 unsigned char *
-push_maybranch_plop(unsigned char *code) {
-    PUSHc(maybranch_plop);
+push_maybranch_plop(unsigned char *code, OP* next) {
+    T_CHARARR maybranch_plop1[] = {
+	mov_mem_r12};
+    PUSHc(maybranch_plop1);
+    PUSHabs(next);
     return code;
 }
+T_CHARARR maybranch_check[] = {
+    cmp_rax_r12,
+    je(0)
+};
+unsigned char *
+push_maybranch_check(unsigned char *code, int next) {
+    unsigned char maybranch_check[] = {
+	cmp_rax_r12,
+	je_0};
+    if (abs(next) > 128) {
+        printf("ERROR: je overflow %d > 128\n", next);
+    } else {
+        PUSHc(maybranch_check);
+        PUSHbyte(next);
+    }
+    return code;
+}
+
 T_CHARARR gotorel[] = {
     jmp(0)
 };
