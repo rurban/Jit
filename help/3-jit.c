@@ -16,19 +16,19 @@ void runops_jit_0 (void){
     PL_op = Perl_pp_const();
     PL_op = Perl_pp_gt();
 
- maybranch_1:
-    op = PL_op->op_next;
+/* maybranch_1: */
+    op = PL_op->op_next; /* save 4(%ebx) (PL_op->next) into %ecx */
     PL_op = Perl_pp_cond_expr();
     if (*p)
         Perl_despatch_signals();
-    if (PL_op == op) /* false */
+    /* simple case: only op->other possible */
+    if (PL_op == op) /* cmp eax to ecx (prev op->next) if false */
         goto next_1;
  other_1:
     PL_op = Perl_pp_pushmark();
     PL_op = Perl_pp_const();
     PL_op = Perl_pp_print();
-    goto leave_1; /* upper scope */
-
+    goto leave_1; /* eof next_1, upper scope */
  next_1:
     PL_op = Perl_pp_enter();
     PL_op = Perl_pp_nextstate();

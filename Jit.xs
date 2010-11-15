@@ -51,7 +51,7 @@ long jit_chain(pTHX_ OP* op, unsigned char *code, unsigned char *code_start
  *   which need to handle pending signals.
  * In 5.6 it was a NOOP.
  */
-/*#define BYPASS_DISPATCH */ /* test ok on i386, not yet tested on amd64 */
+#define BYPASS_DISPATCH /* test ok on i386, not yet tested on amd64 */
 #if (PERL_VERSION > 6) && (PERL_VERSION < 13)
 #define HAVE_DISPATCH
 #define DISPATCH_NEEDED(op) dispatch_needed(op)
@@ -79,15 +79,18 @@ not-threaded:
   OP *op;
   int *p = &Perl_Isig_pending_ptr;
 if maybranch:
-  op = PL_op;
-  PL_op = Perl_pp_opname();  #returns op_next, op_other, op_first, op_last or a new optree start
-  if dispatch_needed: if (*p) Perl_despatch_signals();
-    if (PL_op == op) 	#if maybranch label other targets
-        goto next_1;
-    #assemble op_other chain until 0
-    PL_op = Perl_pp_opname();
-    ...
-    goto leave_1;
+  op = PL_op->next; 	     # save away at ecx to check
+  PL_op = Perl_pp_opname();  # returns op_next, op_other, op_first, op_last 
+			     # or a new optree start
+  if (dispatch_needed) 
+    if (*p) Perl_despatch_signals();
+
+  if (PL_op == op) 	#if maybranch label other targets
+    goto next_1;
+  # assemble op_other chain until 0
+  PL_op = Perl_pp_opname();
+  ...
+  goto leave_1;
  next_1: #continue with op_next
     ...
  leave_1:
@@ -130,6 +133,7 @@ threaded, same logic as above, just:
 #define PUSHc(what) memcpy(code,what,sizeof(what)); code += sizeof(what)
 /* force 4 byte for U32, 64bit uses 8 byte for U32, but 4 byte for call near */
 #define PUSHcall(what) memcpy(code,&what,CALL_SIZE); code += CALL_SIZE
+#define PUSHbyte(byte) { signed char b = (byte); *code++ = b; }
 
 /* __amd64 defines __x86_64 */
 #if defined(__x86_64__) || defined(__amd64) || defined(__amd64__) || defined(_M_X64)
@@ -228,6 +232,7 @@ T_CHARARR NOP[]      = {0x90};    /* nop */
 #define mov_reax_ebx    0x48,0x8b,0x18
 #define mov_redx_eax    0x82,0x02
 #define test_eax_eax    0x85,0xc0
+#define je_0        	0x74
 #define je(byte)        0x74,(byte)
 /* skip call	_Perl_despatch_signals */
 
@@ -275,13 +280,16 @@ T_CHARARR NOP[]      = {0x90};    /* nop */
 /* mov    $memabs,%ebx &PL_op in ebx */
 #define mov_mem_ebx(m)	0xbb,revword(m)
 #define mov_mem_ecx(m)	0xb9,revword(m)
+#define mov_mem_ecx_0	0xb9
 /* &PL_sig_pending in -4(%ebp) */
 #define mov_mem_4ebp(m)	0xc7,0x45,0xfc,revword(m)
 /*#define mov_mem_ecx 	0x8b,0x0d*/
 #define mov_4ebp_edx	0x8b,0x55,0xfc
 #define mov_redx_eax	0x8b,0x02
 #define test_eax_eax    0x85,0xc0
+#define je_0        	0x74
 #define je(byte) 	0x74,(byte)
+#define cmp_ecx_eax     0x39,0xc8
 #define mov_rebp_ebx(byte) 0x8b,0x5d,byte  /* mov 0x8(%ebp),%ebx*/
 
 /* EPILOG */
@@ -302,7 +310,7 @@ T_CHARARR NOP[]      = {0x90};    /* nop */
 #define call 		0xe8	    /* + 4 rel */
 #define ljmp(abs) 	0xff,0x25   /* + 4 memabs */
 #define mov_eax_mem 	0xa3	    /* + 4 memabs */
-#define jmp(byte)       0x3b,(byte) /* maybranch */
+#define jmp(byte)   	0xeb,(byte) /* maybranch */
 
 #ifdef USE_ITHREADS
 # include "i386thr.c"
@@ -638,22 +646,31 @@ jit_chain(pTHX_
 	    if (dryrun) {
 		size += sizeof(maybranch_plop) + sizeof(CALL) + CALL_SIZE;
 	    } else {
-		code = push_maybranch_plop(code);
+                /* cmp returned op = op->next => jmp */
+                DEBUG_v( printf("# maybranch %s\t= 0x%x\n", opname, op->op_ppaddr));
+		code = push_maybranch_plop(code, PL_op->op_next);
 		CALL_ABS(op->op_ppaddr);
 	    }
 	    if ((PL_opargs[op->op_type] & OA_CLASS_MASK) == OA_LOGOP) {
 		/* TODO store and jump to labels */
                 if (dryrun) {
-                    size += sizeof(GOTOREL);
+                    size += sizeof(maybranch_check);
                     size += JIT_CHAIN(cLOGOPx(op)->op_other, NULL, NULL);
                     size += sizeof(GOTOREL);
                 } else {
-                    /* XXX TODO cmp returned op => je */
-                    int next = JIT_CHAIN(cLOGOPx(op)->op_other, NULL, NULL);
+                    int next, other;
+                    LOGOP* logop;
+                    logop = cLOGOPx(op);
+                    other = JIT_CHAIN(logop->op_other, NULL, NULL); /* sizeof other */
+                    other += sizeof(GOTOREL);
+                    code = push_maybranch_check(code, other); /* if cmp: je => next */
+                    DEBUG_v( printf("# other: %s\tsize=%x\n", PL_op_name[logop->op_other->op_type], other));
+                    code = (unsigned char*)JIT_CHAIN(logop->op_other, code, code_start);
+
+                    next = JIT_CHAIN(logop->op_next, NULL, NULL);  /* sizeof next */
+                    DEBUG_v( printf("# next: %s\tsize=%x\n", PL_op_name[logop->op_next->op_type], next));
                     code = push_gotorel(code, next);
-                    code = (unsigned char*)JIT_CHAIN(cLOGOPx(op)->op_other, code, code_start);
-                    next = JIT_CHAIN(cLOGOPx(op)->op_next, code, code_start);
-                    code = push_gotorel(code, (long)code+next);
+                    next = JIT_CHAIN(logop->op_next, code, code_start);
                 }
 	    } else {
 		int next, label;
@@ -661,10 +678,10 @@ jit_chain(pTHX_
 		switch (op->op_type) { 	/* sync this list with B::CC */
 		case OP_FLIP:
 		    if ((op->op_flags & OPf_WANT) == OPf_WANT_LIST) {
-                        if (!dryrun) {
-                            label = JIT_CHAIN(cLOGOPx(cUNOPx(op)->op_first)->op_other, code, code_start);
-                            size += label-(int)code;
-                            code = (unsigned char *)label;
+                        if (dryrun) {
+                            size += JIT_CHAIN(cLOGOPx(cUNOPx(op)->op_first)->op_other, NULL, NULL);
+                        } else {
+                            code = JIT_CHAIN(cLOGOPx(cUNOPx(op)->op_first)->op_other, code, code_start);
                         }
 		    }
 		    break;

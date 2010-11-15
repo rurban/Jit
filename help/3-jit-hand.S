@@ -43,6 +43,7 @@ L2:
 maybranch1:
 	movl	_PL_op, %eax
 	movl	%eax, -8(%ebp)
+	movl	_PL_op, %ecx
 	call	_Perl_pp_cond_expr
 	movl	%eax, (%ebx)
 check_sig2:        
@@ -53,7 +54,7 @@ check_sig2:
 	call	_Perl_despatch_signals
 L3:
 	movl	_PL_op, %eax
-	cmpl	-8(%ebp), %eax
+	cmpl	%ecx, %eax
 	je	next_1
         
 # op_other block from if (if true)
