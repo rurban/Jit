@@ -1,10 +1,9 @@
 /*    Jit.xs -*- mode:C c-basic-offset:4 -*-
  *
  *    JIT (Just-in-time compile) the Perl5 runloop.
- *    Currently for x86 32bit, amd64 64bit. More CPU's later.
+ *    Currently for intel x86 32+64bit. More CPU's later.
  *    Status:
- *      Works only for simple i386 and amd64 (amd64 threaded fails), 
- *      without PERL_ASYNC_CHECK,
+ *      Works only for simple i386 and amd64,
  *      without maybranch ops (return op_other, op_last, ... ignored)
  *
  *    Copyright (C) 2010 by Reini Urban
@@ -51,7 +50,7 @@ long jit_chain(pTHX_ OP* op, unsigned char *code, unsigned char *code_start
  *   which need to handle pending signals.
  * In 5.6 it was a NOOP.
  */
-#define BYPASS_DISPATCH /* test ok on i386, not yet tested on amd64 */
+#define BYPASS_DISPATCH /* not ok on i386thr */
 #if (PERL_VERSION > 6) && (PERL_VERSION < 13)
 #define HAVE_DISPATCH
 #define DISPATCH_NEEDED(op) dispatch_needed(op)
@@ -69,6 +68,9 @@ long jit_chain(pTHX_ OP* op, unsigned char *code, unsigned char *code_start
 #else
 # define JIT_CHAIN(op, code, code_start) jit_chain(aTHX_ op, code, code_start) 
 # define DEB_PRINT_LOC(loc)
+# if PERL_VERSION < 8
+#   define DEBUG_v(x)
+# endif
 #endif
 
 /*
@@ -195,6 +197,7 @@ T_CHARARR NOP[]      = {0x90};    /* nop */
 #define push_r12 	0x41,0x54
 #define push_rbx 	0x53
 #define push_rcx	0x51
+#define mov_rax_rbx     0x48,0x89,0xc3
 #define sub_x_rsp(byte) 0x48,0x83,0xec,byte
 #define add_x_esp(byte) 0x48,0x83,0xc4,byte
 #define fourbyte        0x00,0x00,0x00,0x00
@@ -574,19 +577,9 @@ jit_chain(pTHX_
 	}
 # if defined(DEBUG_s_TEST_)
         if (DEBUG_s_TEST_) {
-#  ifdef USE_ITHREADS
-            T_CHARARR push_arg1[] = { push_arg1_mem };
-#  endif
             if (dryrun) {
-#  ifdef USE_ITHREADS
-                size += sizeof(push_arg1); size += CALL_SIZE;
-#  endif
                 size += sizeof(CALL); size += CALL_SIZE;
             } else {
-#  ifdef USE_ITHREADS
-                PUSHc(push_arg1);
-                PUSHabs(&my_perl);
-#  endif
                 CALL_ABS(&Perl_debstack);
                 dbg_lines("debstack();");
             }
@@ -597,7 +590,6 @@ jit_chain(pTHX_
             T_CHARARR push_arg2[] = { push_arg2_mem };
 #  endif
             if (dryrun) {
-                size += sizeof(push_arg1); size += CALL_SIZE;
 #  ifdef USE_ITHREADS
                 size += sizeof(push_arg2); size += CALL_SIZE;
 #  endif
@@ -607,8 +599,6 @@ jit_chain(pTHX_
 #  ifdef USE_ITHREADS
                     PUSHc(push_arg2);
                     PUSHabs(op);
-                    PUSHc(push_arg1);
-                    PUSHabs(&my_perl);
 #  else
                     PUSHc(push_arg1);
                     PUSHabs(op);
@@ -638,7 +628,7 @@ jit_chain(pTHX_
 	    size += sizeof(CALL); size += CALL_SIZE;
 	} else {
 #ifdef USE_ITHREADS
-	    dbg_cline1("my_perl->Iop = Perl_pp_%s(my_perl);\n", opname);
+	    dbg_cline1("/*my_perl->I*/PL_op = Perl_pp_%s(my_perl);\n", opname);
 #else
             dbg_cline1("PL_op = Perl_pp_%s();\n", opname);
 #endif
@@ -686,7 +676,7 @@ jit_chain(pTHX_
 		PUSHc(DISPATCH);
 		CALL_ABS(&Perl_despatch_signals);
 	    }
-# if defined(USE_ITHREADS) && defined(DISPATCH_POST)
+# if 0 && defined(USE_ITHREADS) && defined(DISPATCH_POST)
 	    if (dryrun) {
 		size += sizeof(DISPATCH_POST);
 	    } else {

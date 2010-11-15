@@ -39,20 +39,35 @@ epilog after final Perl_despatch_signals
 	c3                   	ret
 */
 
-/* my_perl already on stack, Iop at 4(%ebx),  */
-#define X86THR_PROLOG					\
-    push_ebp,		/* save frame pointer*/		\
-    mov_esp_ebp,	/* set new frame pointer */ 	\
-    push_edi,						\
-    push_esi,						\
-    push_ebx,		/* &my_perl */			\
-    push_ecx,						\
-    sub_x_esp(8),	/* room for 2 locals: op, p */ 	\
+/* my_perl already on stack, Iop at 4(%ebx) */
+T_CHARARR x86thr_prolog[] = { 
+    push_ebp,		/* save frame pointer*/
+    mov_esp_ebp,	/* set new frame pointer */
+    push_edi,                                  
+    push_esi,                                  
+    push_ebx,		/* &my_perl */     
+    push_ecx,                                  
+    sub_x_esp(8),       /* room for 2 locals: op, p */
     mov_rebp_ebx(8)     /* mov 0x8(%ebp),%ebx my_perl */
-
-T_CHARARR x86thr_prolog[] = { X86THR_PROLOG };
+#ifdef HAVE_DISPATCH
+    ,mov_mem_4ebp(0)
+#endif
+};
 unsigned char *push_prolog(unsigned char *code) {
-    PUSHc(x86thr_prolog);
+    unsigned char prolog[] = {
+        push_ebp,		/* save frame pointer*/
+        mov_esp_ebp,	/* set new frame pointer */
+        push_edi,                                  
+        push_esi,                                  
+        push_ebx,		/* &my_perl */     
+        push_ecx,                                  
+        sub_x_esp(8),	     /* room for 2 locals: op, p */
+        mov_rebp_ebx(8)    /* mov 0x8(%ebp),%ebx my_perl */
+#ifdef HAVE_DISPATCH
+        ,mov_mem_4ebp(&PL_sig_pending)
+#endif
+    };
+    PUSHc(prolog);
     return code;
 }
 
@@ -78,13 +93,14 @@ T_CHARARR x86thr_save_plop[] = {
 T_CHARARR x86_nop[]          = {0x90};         /* pad */
 /* T_CHARARR x86thr_dispatch_getsig[] = {}; */ /* empty decl fails with msvc */
 T_CHARARR x86thr_dispatch[] = {
-    0x89,0x1e,0x89,0x46,
-    0x04,0x8b,0x86,0x84,
-    0x03,0x00,0x00,0x85,
-    0xC0,0x74,0x08,0x89,
-    0x34,0x24,0xFF,0x25
-}; /* check and call $Perl_despatch_signals */
-/* after calling Perl_despatch_signals, restore my_perl into ebx and push for next.
+    mov_4ebp_edx,	/* value of PL_sig_pending from 4(%ebp) (ptr) to %eax */
+    mov_redx_eax,
+    test_eax_eax,
+    je(8)  		/* je     +8 */
+}; /* call   Perl_despatch_signals */
+
+/* XXX disabled
+   after calling Perl_despatch_signals, restore my_perl into ebx and push for next.
    restore my_perl into ebx and push */
 T_CHARARR x86thr_dispatch_post[] = {
     0x83,0xc4,0x10,0x83,

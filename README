@@ -8,7 +8,7 @@ some simple ops.  op_next targets (returned by false conditions) are favored
 over op_other and other targets.
 
 IT DOES NOT WORK YET!
-It does only work for simple functions! No maybranch ops
+It does only work for simple functions, no branching ops yet.
 
 Faster jitted execution path without runops loop, selected with -MJit or later,
 when stable with perl -j.

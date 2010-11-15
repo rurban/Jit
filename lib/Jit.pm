@@ -24,20 +24,20 @@ Jit the perl5 runops loop in proper execution order
 =head1 DESCRIPTION
 
 WARNING: It does only work yet for simple functions! No branches.
-Only intel CPU's 32 and 64bit (i386 and amd64) yet.
-amd64 threaded fails currently.
+Only intel CPU's 32 and 64bit (i386 and amd64).
 
-This perl5 jitter is super-simple. The compiled optree from
-the perl5 parser is a linked list in memory in non-execution
-order, with wide-spread jumps, almost in reverse order.
+This perl5 jitter is super-simple.
 
-Additionally the calls are indirect.
+The compiled optree from the perl5 parser is a linked list in memory in
+non-execution order, with wide-spread jumps, almost in reverse order.
+Additionally the calls are indirect, and with a shared libperl even far,
+which is stops the CPU prefetching.
 
-The jitter properly aligns the run-time calls in linear "exec" order, so that
-the CPU can prefetch the next (and other) instructions.
+The jitter properly aligns the run-time calls in linear "exec" order,
+so that the CPU can prefetch the next (and other) instructions.
 
-The old indirect call far costs about 70 cycles,
-the new direct call near costs 3-5 cycles and is cached.
+The old indirect far call costs about 70 cycles,
+the new direct call near costs 3-5 cycles and enable CPU prefetching.
 
 Speed up:
   See http://blogs.perl.org/users/rurban/2010/11/performance-hacks.html

@@ -1,5 +1,6 @@
 v0.04_05 2010-11-16 rurban
 
+fixed amd64thr: my_perl is initially at %eax
 work on mybranch: move if maybranch: op = PL_op->next before call,
   without dynamic next maybranch_check 3.t even works.
 simplify jit_chain code

@@ -1,3 +1,4 @@
+require 5.006;	#5.5.5 fails somehow in check_cc
 use ExtUtils::MakeMaker;
 use Config;
 use File::Spec;

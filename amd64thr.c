@@ -35,8 +35,8 @@ T_CHARARR amd64thr_prolog[] = {
     push_rbp,
     mov_rsp_rbp,
     push_rbx,
-    mov_rrsp_rbx,       /* my_perl => rbx */
-    sub_x_rsp(0x20)
+    mov_rax_rbx       /* my_perl => rbx */
+    /*sub_x_rsp(0x20)*/
 #ifdef HAVE_DISPATCH
     ,push_rcx		/* &sigpending (myperl[xx]) => rcx */
 #endif
@@ -50,7 +50,7 @@ T_CHARARR amd64thr_epilog[] = {
 #ifdef HAVE_DISPATCH
     pop_rcx,
 #endif
-    add_x_esp(0x20),
+    /*add_x_esp(0x20),*/
     pop_rbx,
     leave,
     ret
@@ -111,13 +111,14 @@ push_maybranch_check(unsigned char *code, int next) {
 }
 
 T_CHARARR gotorel[] = {
-    jmp(0)
+    0xe9, fourbyte
 };
 unsigned char *
-push_gotorel(unsigned char *code, int label) {
+push_gotorel(unsigned char *code, U32 label) {
     unsigned char gotorel[] = {
-	jmp(label)};
+	0xe9};
     PUSHc(gotorel);
+    PUSHabs(&label);
     return code;
 }
 
