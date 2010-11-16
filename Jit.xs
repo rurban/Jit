@@ -50,7 +50,7 @@ long jit_chain(pTHX_ OP* op, unsigned char *code, unsigned char *code_start
  *   which need to handle pending signals.
  * In 5.6 it was a NOOP.
  */
-#define BYPASS_DISPATCH /* not ok on i386thr */
+/*#define _BYPASS_DISPATCH*/
 #if (PERL_VERSION > 6) && (PERL_VERSION < 13)
 #define HAVE_DISPATCH
 #define DISPATCH_NEEDED(op) dispatch_needed(op)
@@ -171,9 +171,6 @@ threaded, same logic as above, just:
 #define MOV_REL
 #define PUSH_SIZE  4				/* size for the push instruction arg 4/8 */
 
-/* yet untested! */
-#define BYPASS_DISPATCH
-
 #define PUSHabs(what) memcpy(code,what,PUSH_SIZE); code += PUSH_SIZE
 #define PUSHrel(where) { \
     U32 r = (unsigned char*)where - (code+MOV_SIZE);	\
@@ -206,6 +203,9 @@ T_CHARARR NOP[]      = {0x90};    /* nop */
 #define mov_mem_rbx     0x48,0x8b,0x1d /* mov &PL_op,%rbx */
 #define mov_rebp_ebx(byte) 0x8b,0x5d,byte  /* mov 0x8(%ebp),%ebx*/
 #define mov_rrsp_rbx    0x48,0x8b,0x1c,0x24    /* mov    (%rsp),%rbx ; my_perl from stack to rbx */
+
+#define mov_mem_rcx     0x48,0x8b,0x0d /* mov &PL_sig_pending,%rcx */
+#define test_ecx_ecx	0x85,0xc9
 
 #define push_imm_0	0x68
 #define push_imm(m)	0x68,revword(m)
@@ -659,8 +659,7 @@ jit_chain(pTHX_
 		dbg_lines("  Perl_despatch_signals();");
 # endif
 	    }
-# ifndef USE_ITHREADS
-#  ifdef DISPATCH_GETSIG
+# ifdef DISPATCH_GETSIG
 	    if (dryrun) {
 		size += sizeof(DISPATCH_GETSIG);
 		size += MOV_SIZE;
@@ -668,7 +667,6 @@ jit_chain(pTHX_
 		PUSHc(DISPATCH_GETSIG);
 		PUSHrel(&PL_sig_pending);
 	    }
-#  endif
 # endif
 	    if (dryrun) {
 		size += sizeof(DISPATCH) + sizeof(CALL) + CALL_SIZE;
@@ -676,13 +674,6 @@ jit_chain(pTHX_
 		PUSHc(DISPATCH);
 		CALL_ABS(&Perl_despatch_signals);
 	    }
-# if 0 && defined(USE_ITHREADS) && defined(DISPATCH_POST)
-	    if (dryrun) {
-		size += sizeof(DISPATCH_POST);
-	    } else {
-		PUSHc(DISPATCH_POST);
-	    }
-# endif
         }
 #endif
 

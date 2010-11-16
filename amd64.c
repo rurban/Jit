@@ -68,7 +68,7 @@ Dump of assembler code from 0x1127000 to 0x1127058:
 T_CHARARR amd64_prolog[] = {
     push_rbp,
     mov_rsp_rbp,
-    push_rbx, 		/* &PL_op */
+    /*push_rbx,*/
 #ifdef HAVE_DISPATCH
     push_rcx,
 #endif
@@ -84,7 +84,7 @@ unsigned char *push_prolog(unsigned char *code) {
     T_CHARARR prolog1[] = {
 	push_rbp,
         mov_rsp_rbp,
-	push_rbx, 	/* for &PL_op */
+	/*push_rbx,*/
 #ifdef HAVE_DISPATCH
 	push_rcx,
 #endif
@@ -108,7 +108,7 @@ T_CHARARR amd64_epilog[] = {
 #ifdef HAVE_DISPATCH
     pop_rcx,
 #endif
-    pop_rbx,
+    /*pop_rbx,*/
     leave,
     ret};
 
@@ -122,11 +122,11 @@ T_CHARARR amd64_save_plop[]  = {
 };      
 T_CHARARR amd64_nop[]        = {0x90};      /* pad */
 T_CHARARR amd64_nop2[]       = {0x90,0x90};      /* jmp pad */
-T_CHARARR amd64_dispatch_getsig[] = {0x8b,0x0d};
+T_CHARARR amd64_dispatch_getsig[] = {
+    mov_mem_rcx};
 T_CHARARR amd64_dispatch[] = {
-    0x85,0xc9,0x74,0x06,
-    0xFF,0x25};
-/*T_CHARARR amd64_dispatch_post[] = {}; */ /* fails with msvc and sun cc */
+    test_ecx_ecx,
+    je(5)};
 
 T_CHARARR maybranch_plop[] = {
     mov_mem_r12, fourbyte
@@ -179,7 +179,6 @@ push_gotorel(unsigned char *code, U32 label) {
 # define SAVE_PLOP	amd64_save_plop
 # define DISPATCH_GETSIG amd64_dispatch_getsig
 # define DISPATCH       amd64_dispatch
-/* # define DISPATCH_POST  amd64_dispatch_post */
 # define EPILOG         amd64_epilog
 # define MAYBRANCH_PLOP maybranch_plop
 # define GOTOREL        gotorel

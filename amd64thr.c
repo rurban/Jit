@@ -67,17 +67,10 @@ T_CHARARR amd64thr_save_plop[]  = { /* save new PL_op into my_perl */
 };
 T_CHARARR amd64thr_nop2[]       = {0x90,0x90};      /* jmp pad */
 T_CHARARR amd64thr_dispatch_getsig[] = {
-    0x8b,0x0d};
-/*
-  74 08                	je     40092c <main+0x38>
-  48 89 df             	mov    %rbx,%rdi
-  e8 8c fe ff ff       	callq  4007b8 <Perl_despatch_signals@plt>
-  31 db                	xor    %ebx,%ebx
-*/
+    mov_mem_rcx};
 T_CHARARR amd64thr_dispatch[] = {
-    0x85,0xc9,0x74,0x06,
-    0xFF,0x25};
-T_CHARARR amd64thr_dispatch_post[] = {0x31,0xdb};
+    test_ecx_ecx,
+    je(8)};
 
 #define mov_rrax_r12	0x4c,0x8b,0x20
 
@@ -128,72 +121,9 @@ push_gotorel(unsigned char *code, U32 label) {
 # define SAVE_PLOP	amd64thr_save_plop
 # define DISPATCH_GETSIG amd64thr_dispatch_getsig
 # define DISPATCH       amd64thr_dispatch
-# define DISPATCH_POST  amd64thr_dispatch_post
 # define EPILOG         amd64thr_epilog
 # define MAYBRANCH_PLOP maybranch_plop
 # define GOTOREL        gotorel
-
-/*
-bad:
-0x0000000000a6c000:     push   %rbp
-0x0000000000a6c001:     mov    %rsp,%rbp
-0x0000000000a6c004:     push   %rbx
-0x0000000000a6c005:     mov    (%rsp),%rbx
-0x0000000000a6c009:     sub    $0x20,%rsp
-0x0000000000a6c00d:     mov    %rbx,%rdi
-0x0000000000a6c010:     callq  0x4e4010 <Perl_pp_enter> ; segv code == my_perl a6c000
-0x0000000000a6c015:     mov    %rax,0x8(%rbx)
-0x0000000000a6c019:     mov    %rbx,%rdi
-0x0000000000a6c01c:     callq  0x4e7330 <Perl_pp_nextstate>
-0x0000000000a6c021:     mov    %rax,0x8(%rbx)
-0x0000000000a6c025:     mov    %rbx,%rdi
-0x0000000000a6c028:     callq  0x4ec510 <Perl_pp_pushmark>
-0x0000000000a6c02d:     mov    %rax,0x8(%rbx)
-0x0000000000a6c031:     mov    %rbx,%rdi
-0x0000000000a6c034:     callq  0x4e1860 <Perl_pp_const>
-0x0000000000a6c039:     mov    %rax,0x8(%rbx)
-0x0000000000a6c03d:     mov    %rbx,%rdi
-0x0000000000a6c040:     callq  0x4f16c0 <Perl_pp_print>
-0x0000000000a6c045:     mov    %rax,0x8(%rbx)
-0x0000000000a6c049:     mov    %rbx,%rdi
-0x0000000000a6c04c:     callq  0x4e55b0 <Perl_pp_leave>
-0x0000000000a6c051:     mov    %rax,0x8(%rbx)
-0x0000000000a6c055:     mov    $0x0,%eax
-0x0000000000a6c05a:     add    $0x20,%rsp
-0x0000000000a6c05e:     pop    %rbx
-0x0000000000a6c05f:     leaveq
-0x0000000000a6c060:     retq
-
-bad:
-0x01455000:     push   %rbp
-0x01455001:     mov    %rsp,%rbp
-0x01455004:     push   %rbx
-0x01455005:     sub    $0x20,%rsp
-0x01455009:     mov    0x8(%rbp),%ebx
-0x0145500c:     mov    %ebx,(%rsp)
-0x0145500f:     callq  0x4e4010 <Perl_pp_enter>
-0x01455014:     mov    %eax,0x8(%rbx)		: segv
-0x01455017:     mov    %ebx,(%rsp)		
-0x0145501a:     callq  0x4e7330 <Perl_pp_nextstate>
-0x0145501f:     mov    %eax,0x8(%rbx)
-0x01455022:     mov    %ebx,(%rsp)
-0x01455025:     callq  0x4ec510 <Perl_pp_pushmark>
-0x0145502a:     mov    %eax,0x8(%rbx)
-0x0145502d:     mov    %ebx,(%rsp)
-0x01455030:     callq  0x4e1860 <Perl_pp_const>
-0x01455035:     mov    %eax,0x8(%rbx)
-0x01455038:     mov    %ebx,(%rsp)
-0x0145503b:     callq  0x4f16c0 <Perl_pp_print>
-0x01455040:     mov    %eax,0x8(%rbx)
-0x01455043:     mov    %ebx,(%rsp)
-0x01455046:     callq  0x4e55b0 <Perl_pp_leave>
-0x0145504b:     mov    %eax,0x8(%rbx)
-0x0145504e:     mov    $0x0,%eax
-0x01455053:     pop    %rbx
-0x01455054:     add    $0x20,%rsp
-0x01455058:     leaveq
-0x01455059:     retq
-*/
 
 /*
  * Local variables:

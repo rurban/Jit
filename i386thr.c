@@ -91,7 +91,6 @@ T_CHARARR x86thr_save_plop[] = {
     0x89,0x43,0x04	/* mov    %eax,0x4(%ebx) */
 }; /* save new PL_op into my_perl */
 T_CHARARR x86_nop[]          = {0x90};         /* pad */
-/* T_CHARARR x86thr_dispatch_getsig[] = {}; */ /* empty decl fails with msvc */
 T_CHARARR x86thr_dispatch[] = {
     mov_4ebp_edx,	/* value of PL_sig_pending from 4(%ebp) (ptr) to %eax */
     mov_redx_eax,
@@ -99,22 +98,11 @@ T_CHARARR x86thr_dispatch[] = {
     je(8)  		/* je     +8 */
 }; /* call   Perl_despatch_signals */
 
-/* XXX disabled
-   after calling Perl_despatch_signals, restore my_perl into ebx and push for next.
-   restore my_perl into ebx and push */
-T_CHARARR x86thr_dispatch_post[] = {
-    0x83,0xc4,0x10,0x83,
-    0xec,0x0c,0x31,0xdb,
-    0x53,0x90
-};
-
 # define PROLOG 	x86thr_prolog
 # define CALL	 	x86thr_call
 # define JMP	 	x86thr_call
 # define SAVE_PLOP	x86thr_save_plop
-# define DISPATCH_GETSIG x86thr_dispatch_getsig
 # define DISPATCH       x86thr_dispatch
-# define DISPATCH_POST  x86thr_dispatch_post
 # define EPILOG         x86thr_epilog
 
 /*

@@ -1,14 +1,15 @@
 v0.04_05 2010-11-16 rurban
 
 fixed amd64thr: my_perl is initially at %eax
+fixed threaded -Ds debstack calls, -Dt fails
+fixed HAVE_DISPATCH on all 4 platforms
 work on mybranch: move if maybranch: op = PL_op->next before call,
   without dynamic next maybranch_check 3.t even works.
 simplify jit_chain code
 harmonize amd64 maybranch asm (store next away at r12),
 use dbg_lines macros instead of ugly #ifdef orgies
 
-t/2.t works now, t/3.t not yet working
-
+t/2.t works now mostly, t/3.t not yet working
 
 v0.04_04 2010-11-15 rurban
 
