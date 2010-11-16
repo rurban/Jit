@@ -578,7 +578,7 @@ jit_chain(pTHX_
 # if defined(DEBUG_s_TEST_)
         if (DEBUG_s_TEST_) {
             if (dryrun) {
-                size += sizeof(CALL); size += CALL_SIZE;
+                size += sizeof(CALL) + CALL_SIZE;
             } else {
                 CALL_ABS(&Perl_debstack);
                 dbg_lines("debstack();");
@@ -591,18 +591,19 @@ jit_chain(pTHX_
 #  endif
             if (dryrun) {
 #  ifdef USE_ITHREADS
-                size += sizeof(push_arg2); size += CALL_SIZE;
+                size += sizeof(push_arg2);
+#  else
+                size += sizeof(push_arg1);
 #  endif
-                size += sizeof(CALL); size += CALL_SIZE;
+                size += PUSH_SIZE + sizeof(CALL) + CALL_SIZE;
             } else {
                 if (op) {
 #  ifdef USE_ITHREADS
                     PUSHc(push_arg2);
-                    PUSHabs(op);
 #  else
                     PUSHc(push_arg1);
-                    PUSHabs(op);
 #  endif
+                    PUSHabs(op);
                     CALL_ABS(&Perl_debop);
                     DEBUG_v( printf("# debop(%x) %s\n", op, (char*)PL_op_name[op->op_type]));
                 }
@@ -625,7 +626,7 @@ jit_chain(pTHX_
 	    }
         }
 	if (dryrun) {
-	    size += sizeof(CALL); size += CALL_SIZE;
+	    size += sizeof(CALL) + CALL_SIZE;
 	} else {
 #ifdef USE_ITHREADS
 	    dbg_cline1("/*my_perl->I*/PL_op = Perl_pp_%s(my_perl);\n", opname);

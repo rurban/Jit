@@ -81,10 +81,10 @@ T_CHARARR x86thr_epilog[] = {
     ret
 };
 
-/* call near */
+/* call near with my_perl as arg1 */
 T_CHARARR x86thr_call[]  = {
     0x89,0x1c,0x24,	/* mov    %ebx,(%esp) */
-    0xE8		/* call near 0xoffset */
+    0xE8		/* call near offset */
 };
 /* push my_perl, call near offset $PL_op->op_ppaddr */
 T_CHARARR x86thr_save_plop[] = {
