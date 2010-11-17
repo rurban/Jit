@@ -47,10 +47,10 @@ int global_label;
 int global_loops = 0;
 #endif
 
-#define PUSH_JMP(jmp)                                              \
+#define PUSH_JMP(jmp)                                                  \
     jmptargets = (JMPTGT*)realloc(jmptargets, ++jmpix*sizeof(JMPTGT)); \
-    jmptargets[jmpix] = jmp
-#define POP_JMP jmptargets[--jmpix]
+    memcpy(&jmptargets[jmpix], jmp, sizeof(JMPTGT))
+#define POP_JMP 	(jmpix ? &jmptargets[--jmpix] : NULL)
 
 int dispatch_needed(OP* op);
 int maybranch(OP* op);
@@ -566,6 +566,10 @@ call_abs (CODE *code, void *addr) {
     return code;
 }
 
+CODE *jmp_search_label(OP* op) {
+    croak("jmp_search_label NYI");
+}
+
 long
 jit_chain(pTHX_
 	  OP *op,
@@ -718,13 +722,13 @@ jit_chain(pTHX_
                     other += sizeof(GOTOREL);
                     code = push_maybranch_check(code, other); /* if cmp: je => next */
                     DEBUG_v( printf("# other_%d: %s\tsize=%x\n", global_label, PL_op_name[logop->op_other->op_type], other));
-                    code = (CODE*)JIT_CHAINinc(logop->op_other, code, code_start);
+                    code = (CODE*)JIT_CHAIN(logop->op_other, code, code_start);
                     dbg_lines1("goto branch_%d;", global_label);
                     next = JIT_CHAIN(logop->op_next, NULL, NULL);  /* sizeof next */
                     DEBUG_v( printf("# next_%d: %s\tsize=%x\n", global_label, PL_op_name[logop->op_next->op_type], next));
                     code = push_gotorel(code, next);
                     dbg_lines1("next_%d:", global_label);
-                    next = JIT_CHAINinc(logop->op_next, code, code_start);
+                    next = JIT_CHAIN(logop->op_next, code, code_start);
                     dbg_lines1("branch_%d:", global_label);
                 }
 	    } else { /* special branches */
@@ -790,7 +794,7 @@ jit_chain(pTHX_
                         cx->redoop = code;
                         dbg_lines1("redoop_%d:", global_label);
                         code = JIT_CHAIN(loop->op_redoop, (char*)lsize, code_start);
-                        PUSH_CX(cx);
+                        PUSH_JMP(cx);
                         dbg_lines1("branch_%d:", global_label);
                     }
 		    break;
@@ -821,10 +825,11 @@ jit_chain(pTHX_
                        if (PL_op != ($sym)->op_next && PL_op != (OP*)0){return PL_op;} */
                     if (dryrun) {
                         size += sizeof(GOTOREL);
+                        size += sizeof(maybranch_check);
                     } else { /* get back a OP* address. but we can only jump to PUSH_CX ops */
                         CODE* label;
                         DEBUG_v( printf("# pp_goto: %s\n", label));
-                        if (label = cx_search_label(op)) {
+                        if (label = jmp_search_label(op)) {
                             dbg_lines1("if (op == op->op_next) goto next_%d;", global_label);
                             code = push_maybranch_check(code, 5); /* if cmp: je => next */
                             dbg_lines1("goto lab_%0x:", label);
@@ -843,7 +848,7 @@ jit_chain(pTHX_
                         JMPTGT *jmp;
                         jmp = POP_JMP;
                         DEBUG_v( printf("# next %x\n", jmp->nextop));
-                        code = push_goto(jmp->nextop); /* jmp or rel? */
+                        code = push_gotorel(code, (int)jmp->nextop); /* jmp or rel? */
                     }
 		default:
 		    warn("unsupport branch for %s", PL_op_name[op->op_type]);
@@ -923,7 +928,7 @@ Perl_runops_jit(pTHX)
 #endif
             "OP *PL_op; void runops_jit_%d (void);\n"
 	    "void runops_jit_%d (void){ OP* op;\n"
-            global_loops, global_loops);
+            , global_loops, global_loops);
     line += 2;
 #endif
     root = PL_op;
