@@ -8,7 +8,7 @@
 #      Assemble into a mprotected string and call into it instead of the runloop
 
 package Jit;
-our $VERSION = '0.04_05';
+our $VERSION = '0.04_06';
 require DynaLoader;
 use vars qw( @ISA $VERSION );
 @ISA = qw(DynaLoader);
