@@ -838,10 +838,10 @@ jit_chain(pTHX_
                             dbg_lines("if (!op) return 0;");
                         }
                         dbg_lines1("next_%d", global_label);
-                        global_label++;
                     }
 		case OP_NEXT:
-                    /* if not OPf_SPECIAL pop label op->pv from jmptargets (prev. called cxstack), else just next jmp */
+                    /* if not OPf_SPECIAL pop label op->pv from jmptargets (prev. called cxstack), 
+                       else just next jmp */
                     if (dryrun) {
                         size += sizeof(GOTOREL);
                     } else {
@@ -854,7 +854,9 @@ jit_chain(pTHX_
 		    warn("unsupport branch for %s", PL_op_name[op->op_type]);
 		}
 	    }
+#ifdef DEBUGGING
             global_label++;
+#endif
 	}
     } while (op = op->op_next);
     return dryrun ? size : (int)code;
