@@ -828,7 +828,7 @@ jit_chain(pTHX_
                             dbg_lines1("if (op == op->op_next) goto next_%d;", global_label);
                             code = push_maybranch_check(code, 5); /* if cmp: je => next */
                             dbg_lines1("goto lab_%0x:", label);
-                            code = push_gotorel(code, label);
+                            code = push_gotorel(code, (int)label);
                         } else {
                             dbg_lines("if (!op) return 0;");
                         }
@@ -841,7 +841,7 @@ jit_chain(pTHX_
                         size += sizeof(GOTOREL);
                     } else {
                         JMPTGT *jmp;
-                        jmp = POP_jmp;
+                        jmp = POP_JMP;
                         DEBUG_v( printf("# next %x\n", jmp->nextop));
                         code = push_goto(jmp->nextop); /* jmp or rel? */
                     }
