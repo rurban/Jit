@@ -34,8 +34,10 @@ typedef unsigned char CODE;
 #define ALIGN_N(n,c) (c%n?(c+(n-c%n)):c) 
 
 typedef struct jmptarget {
-    CODE *label;
-    CODE *nextop;
+    OP   *op;       /* the target op */
+    char *label;    /* XXX not sure if need this */
+    CODE *labeltgt; /* the code points for the 4 targets: label (run-time lookup for goto XS and goto label) */
+    CODE *nextop;   /* and the 3 loop targets */
     CODE *lastop;
     CODE *redoop;
 } JMPTGT;
@@ -60,7 +62,7 @@ long jit_chain(pTHX_ OP* op, CODE *code, CODE *code_start
               ,FILE *fh, FILE *stabs
 #endif
 );
-/* XXX needed? pp_goto does this already */
+/* search dynamically the code target for op in jmptargets */
 CODE *jmp_search_label(OP* op);
 
 /* When do we need PERL_ASYNC_CHECK?
@@ -514,7 +516,7 @@ maybranch(OP* op) {
     case OP_LAST:
     case OP_NEXT:
     case OP_REDO:
-    case OP_DUMP:
+    case OP_DUMP: /* makes no sense to support */
     case OP_GOTO:
     case OP_REQUIRE: /* ? */
     case OP_ENTEREVAL:
@@ -566,8 +568,15 @@ call_abs (CODE *code, void *addr) {
     return code;
 }
 
+/* XXX TODO Search dynamically the code target for op in jmptargets */
 CODE *jmp_search_label(OP* op) {
-    croak("jmp_search_label NYI");
+    int ix = jmpix;
+    while (ix--) {
+        if (jmptargets[ix].op) { /* no loop */
+            return jmptargets[ix].labeltgt;
+        }
+    }
+    return (CODE*)0;
 }
 
 long
@@ -638,6 +647,17 @@ jit_chain(pTHX_
 #endif
 
 	if (op->op_type == OP_NULL) continue;
+
+        /* check labels -> store jmp targets. ignore dbstate for now (-d -MJit) */
+	if (op->op_type == OP_NEXTSTATE) {
+            char *label;
+            JMPTGT *cx;
+            if (label = CopLABEL((COP*)op)) {
+                cx->op = op;
+                cx->label = label;
+                PUSH_JMP(cx);
+            }
+        }
 	
         if (maybranch(op)) {
 	    if (dryrun) {
@@ -733,6 +753,9 @@ jit_chain(pTHX_
                 }
 	    } else { /* special branches */
 		int next;
+#  ifdef USE_ITHREADS
+                T_CHARARR push_arg2[] = { push_arg2_mem };
+#  endif
 		switch (op->op_type) { 	/* sync this list with B::CC */
 		case OP_FLIP:
                     DEBUG_v( printf("# flip_%d\n", global_label));
@@ -776,6 +799,8 @@ jit_chain(pTHX_
 
                         DEBUG_v( printf("# nextop_%d: %s\tsize=%x\n", global_label, PL_op_name[loop->op_nextop->op_type], lsize));
                         dbg_lines1("nextop_%d:", global_label);
+                        cx->op = loop;
+                        cx->label = NULL;
                         cx->nextop = code;
                         code = JIT_CHAIN(loop->op_nextop, code, code_start);
 
@@ -821,26 +846,52 @@ jit_chain(pTHX_
                    If no cx record is found, continue with the unjitted OP.
                  */    
 		case OP_GOTO:
-		    /* we can only jump to jitted and recorded labels, else jump to unjitted code.
+		    /* XXX We can only jump to jitted and recorded labels, else jump to unjitted code.
                        if (PL_op != ($sym)->op_next && PL_op != (OP*)0){return PL_op;} */
                     if (dryrun) {
-                        size += sizeof(GOTOREL);
-                        size += sizeof(maybranch_check);
+                        if (!op->op_flags & (OPf_STACKED|OPf_SPECIAL)) {
+#ifdef USE_ITHREADS
+                            size += sizeof(push_arg2);
+#else
+                            size += sizeof(push_arg1);
+#endif
+                            size += PUSH_SIZE + sizeof(CALL) + CALL_SIZE;
+                            size += sizeof(GOTOREL);
+                            /*size += sizeof(maybranch_check);*/
+                        }
                     } else { /* get back a OP* address. but we can only jump to PUSH_CX ops */
-                        CODE* label;
-                        DEBUG_v( printf("# pp_goto: %s\n", label));
-                        if (label = jmp_search_label(op)) {
+                        CODE* labeltgt;
+                        char *label;
+                        OP *retop = NULL;
+                        /* The retop with the found label is only retrieved dynamic, within jit.
+                           so we need to call jmp_search_label to get the labeltgt */
+                        if (!op->op_flags & (OPf_STACKED|OPf_SPECIAL)) {
+#ifdef DEBUGGING
+                            label = ((PVOP*)op)->op_pv;
+                            DEBUG_v( printf("# pp_goto: %s\n", label));
+#endif
+#ifdef USE_ITHREADS
+                            PUSHc(push_arg2);
+#else
+                            PUSHc(push_arg1);
+#endif
+                            dbg_lines("unsigned char *label = jmp_search_label(op);");
+                            PUSHabs(op);
+                            CALL_ABS(&jmp_search_label);
+                            dbg_lines("if (label) goto label");
+                            dbg_lines("else (PL_op->op_ppaddr)();"); /* not found, continue unjitted */
+                            /*code = push_gotorel(code, (int)label);*/
+                        } else {
                             dbg_lines1("if (op == op->op_next) goto next_%d;", global_label);
                             code = push_maybranch_check(code, 5); /* if cmp: je => next */
                             dbg_lines1("goto lab_%0x:", label);
                             code = push_gotorel(code, (int)label);
-                        } else {
-                            dbg_lines("if (!op) return 0;");
+                            /* dbg_lines("if (!op) return 0;"); */
+                            dbg_lines1("next_%d", global_label);
                         }
-                        dbg_lines1("next_%d", global_label);
                     }
 		case OP_NEXT:
-                    /* if not OPf_SPECIAL pop label op->pv from jmptargets (prev. called cxstack), 
+                    /* XXX if not OPf_SPECIAL pop label op->pv from jmptargets (prev. called cxstack), 
                        else just next jmp */
                     if (dryrun) {
                         size += sizeof(GOTOREL);
@@ -1018,6 +1069,7 @@ Perl_runops_jit(pTHX)
     code = (CODE*)JIT_CHAIN(PL_op, code, code_start);
     PUSHc(EPILOG);
     while (((unsigned int)&code | 0xfffffff0) % 4) { *(code++) = NOP[0]; }
+    /* XXX patchup missed jmptargets */
 
 #ifdef PROFILING
     if (profiling) {
