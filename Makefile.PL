@@ -78,7 +78,7 @@ if ($^O ne 'MSWin32') {
   END { unlink "a.out", "test.exe", "test$obj", "test.c"; };
   if (check_cc("memalign(2048, 1024)")) {
     $ccflags .= " -DHAVE_MEMALIGN";
-  } elsif (check_cc("posix_memalign(2048, 1024)")) {
+  } elsif (check_cc("void *p; posix_memalign(&p, 2048, 1024)")) {
     $ccflags .= " -DHAVE_POSIX_MEMALIGN";
   }
 }
