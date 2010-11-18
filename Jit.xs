@@ -861,7 +861,9 @@ Perl_runops_jit(pTHX)
     code = (char*)memalign(pagesize, size*sizeof(char));
 # else
 #  ifdef HAVE_POSIX_MEMALIGN
-    code = (char*)posix_memalign(pagesize, size*sizeof(char));
+    if (posix_memalign((void**)&code, pagesize, size*sizeof(char))) {
+        croak("posix_memalign(code,%d,%d) failed", pagesize, size);
+    }
 #  else
     code = (char*)malloc(size);
     if ((int)code & (pagesize-1)) { /* need to align it manually to 0x1000 */
