@@ -39,7 +39,10 @@ close F;
 my $p = qq( -e $e );
 $c .= " -Dv" if $dbg and $] > 5.008;
 print "# gdb --args $c $p\n" if $dbg;
-ok (`$c $p`, "end of loop");
+TODO: {
+  local $TODO = 'no non-local jumps yet';
+  ok (`$c $p`, "end of loop");
+}
 
 $e = "t/_t4_2.pl";
 $script = <<'EOF';
@@ -57,5 +60,7 @@ close F;
 
 $p = qq( -e $e );
 print "# gdb --args $c $p\n" if $dbg;
-ok (`$c $p` =~ /^ok/, "goto inside a for(;;) loop body from inside the body");
-
+TODO: {
+  local $TODO = 'no non-local jumps yet';
+  ok (`$c $p` =~ /^ok/, "goto inside a for(;;) loop body from inside the body");
+}
