@@ -1,3 +1,8 @@
+v0.04_06 2010-11-18 rurban
+
+fixed posix_memalign (freebsd)
+added preliminary support for non-local jumps (goto + loops), not working though
+
 v0.04_05 2010-11-16 rurban
 
 fixed amd64thr: my_perl is initially at %eax
