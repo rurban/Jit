@@ -82,6 +82,9 @@ if ($^O ne 'MSWin32') {
     $ccflags .= " -DHAVE_POSIX_MEMALIGN";
   }
 }
+my $clean_t = File::Spec->catfile("t", "_t*.pl")." ";
+$clean_t .= File::Spec->catfile("help", "*.dis")." ";
+$clean_t .= File::Spec->catfile("help", "*".$Config{obj_ext})." ";
 
 WriteMakefile
  (
@@ -104,8 +107,9 @@ WriteMakefile
    ) : ()),
   #SIGN  => 1,
   clean => { FILES =>
- 	       "*.core *.stackdump a.out *.exe *.dis *.s *.i *.obj *.o ".
-               "*.pdb *~ dll.base dll.exp *.err *.bak"
+ 	       "*.core *.stackdump a.out *.exe run-jit.* *.i *".$Config{obj_ext}." "
+               ."a.out a.exe "
+               ."*.pdb *~ dll.base dll.exp *.err *.bak $clean_t"
   },
  );
 
