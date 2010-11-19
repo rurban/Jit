@@ -652,7 +652,11 @@ jit_chain(pTHX_
 	if (op->op_type == OP_NEXTSTATE) {
             char *label;
             JMPTGT *cx;
+#ifdef CopLABEL
             if (label = CopLABEL((COP*)op)) {
+#else
+            if (label = ((COP*)op)->cop_label) {
+#endif
                 cx->op = op;
                 cx->label = label;
                 PUSH_JMP(cx);
@@ -753,6 +757,7 @@ jit_chain(pTHX_
                 }
 	    } else { /* special branches */
 		int next;
+                T_CHARARR push_arg1[] = { push_arg1_mem };
 #  ifdef USE_ITHREADS
                 T_CHARARR push_arg2[] = { push_arg2_mem };
 #  endif
