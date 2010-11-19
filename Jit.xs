@@ -415,15 +415,18 @@ push_gotorel(CODE *code, int label) {
     PUSHc(gotorel);
     return code;
 }
-T_CHARARR ifop0return[] = {
-    test_eax_eax,
-    je(sizeof(EPILOG)),
-};
 
 # define MAYBRANCH_PLOP maybranch_plop
 # define GOTOREL        gotorel
 
 #endif /* EOF i386 */
+
+#if defined(JIT_CPU_X86) || defined(JIT_CPU_AMD64)
+T_CHARARR ifop0return[] = {
+    test_eax_eax,
+    je(sizeof(EPILOG)),
+};
+#endif
 
 #if defined(__ia64__) || defined(__ia64) || defined(_M_IA64)
 #error "IA64 not supported so far"
