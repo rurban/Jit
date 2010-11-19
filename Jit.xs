@@ -895,6 +895,7 @@ jit_chain(pTHX_
                             dbg_lines1("next_%d", global_label);
                         }
                     }
+                    break;
 		case OP_NEXT:
                     /* XXX if not OPf_SPECIAL pop label op->pv from jmptargets (prev. called cxstack), 
                        else just next jmp */
@@ -906,6 +907,7 @@ jit_chain(pTHX_
                         DEBUG_v( printf("# next %x\n", jmp->nextop));
                         code = push_gotorel(code, (int)jmp->nextop); /* jmp or rel? */
                     }
+                    break;
 		default:
 		    warn("unsupport branch for %s", PL_op_name[op->op_type]);
 		}
