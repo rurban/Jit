@@ -1,7 +1,9 @@
 # -*- perl -*-
-
 use Config;
-my $c = qq($^X -Mblib -MJit);
+use File::Spec;
+my $X = $^X =~ m/\s/ ? qq{"$^X"} : $^X;
+my $blib = "-I".File::Spec->catfile("blib","arch")." -I".File::Spec->catfile("blib","lib");
+my $c = qq($X $blib -MJit);
 my $dbg = $Config{ccflags} =~ /-DDEBUGGING/;
 my $thr = $Config{useithreads};
 #unless ($dbg) {

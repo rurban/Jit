@@ -100,16 +100,18 @@ WriteMakefile
    ('META_MERGE'  => {
      resources =>
      {
-       license     => 'http://dev.perl.org/licenses/',
-       repository  => 'http://github.com/rurban/Jit/',
+       license      => 'http://dev.perl.org/licenses/',
+       repository   => 'http://github.com/rurban/Jit/',
+      'MailingList' => 'http://groups.google.com/group/perl-compiler',
      },
     }
    ) : ()),
   #SIGN  => 1,
   clean => { FILES =>
- 	       "*.core *.stackdump a.out *.exe run-jit.* *.i *".$Config{obj_ext}." "
-               ."a.out a.exe "
-               ."*.pdb *~ dll.base dll.exp *.err *.bak $clean_t"
+             "*.core *.stackdump a.out run-jit.* *.i ".
+             "*".($Config{obj_ext} ? $Config{obj_ext} : ".o")." "
+             ."$clean_t *.err *.bak "
+             .($^O eq 'MSWin32' ? "*.exe  *.pdb *~ dll.base dll.exp " : "")
   },
  );
 

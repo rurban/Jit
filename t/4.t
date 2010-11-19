@@ -1,8 +1,12 @@
 # -*- perl -*-
 # goto loop next redo
-use Config;
 use Test::More tests => 2;
-my $c = qq($^X -Mblib -MJit);
+
+use Config;
+use File::Spec;
+my $X = $^X =~ m/\s/ ? qq{"$^X"} : $^X;
+my $blib = "-I".File::Spec->catfile("blib","arch")." -I".File::Spec->catfile("blib","lib");
+my $c = qq($X $blib -MJit);
 my $dbg = $Config{ccflags} =~ /-DDEBUGGING/;
 my $thr = $Config{useithreads};
 
@@ -18,17 +22,13 @@ for (1) {
     elsif ($cond == 0) {
       OTHER:
 	$cond = 2;
-	is($count, 0, 'OTHER');
 	$count++;
 	goto THIRD;
     }
-    else {
-      THIRD:
-	is($count, 1, 'THIRD');
-	$count++;
-    }
 }
-$count == 2 ? print "ok 1\n" : print "not ok 1\n";
+THIRD:
+$count++;
+die unless $count == 2; #? print "ok 1\n" : print "not ok 1\n";
 EOF
 
 open F, ">", $e;
