@@ -58,7 +58,7 @@ print F $script;
 close F;
 #END { unlink $e; }
 
-$p = qq( -e $e );
+$p = $e;
 print "# gdb --args $c $p\n" if $dbg;
 TODO: {
   local $TODO = 'no non-local jumps yet';
