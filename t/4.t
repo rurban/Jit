@@ -36,7 +36,7 @@ print F $script;
 close F;
 #END { unlink $e; }
 
-my $p = qq( -e $e );
+my $p = $e;
 $c .= " -Dv" if $dbg and $] > 5.008;
 print "# gdb --args $c $p\n" if $dbg;
 TODO: {
