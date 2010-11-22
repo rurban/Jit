@@ -326,6 +326,7 @@ T_CHARARR NOP[]      = {0x90};    /* nop */
 T_CHARARR NOP[]      = {0x90};    /* nop */
 
 /* PROLOG */
+#define enter_8         0xc8,0x08,0x00,0x00
 #define push_ebp    	0x55
 #define mov_esp_ebp 	0x89,0xe5
 #define push_edi 	0x57
@@ -757,6 +758,7 @@ jit_chain(pTHX_
 	if (maybranch(op)) {
             int lsize;
             HV* otherops = NULL;
+            SV *keysv = newSViv(PTR2IV(&op));
 	    if (!dryrun) {
                 dbg_cline1("if (PL_op == op/*->op_next*/) goto next_%d;\n", global_label);
 		dbg_stabs1("if (PL_op == op->next) goto next_%d;", global_label);
@@ -766,11 +768,11 @@ jit_chain(pTHX_
             if (!otherops)  {
                 otherops = newHV();
             }
-            if (hv_exists_ent(otherops, &op, 0)) {
+            if (hv_exists_ent(otherops, keysv, 0)) {
                 DEBUG_v( printf("# %s already jitted\n", PL_op_name[op->op_type]));
                 goto OUT;
             } else {
-                hv_store_ent(otherops, &op, &PL_sv_yes, 0); 
+                hv_store_ent(otherops, keysv, &PL_sv_yes, 0); 
             }
 	    if ((PL_opargs[op->op_type] & OA_CLASS_MASK) == OA_LOGOP) {
                 if (dryrun) {
@@ -1094,6 +1096,9 @@ Perl_runops_jit(pTHX)
         croak("posix_memalign(code,%d,%d) failed", pagesize, size);
     }
 #  else
+    /* e.g. openbsd has no memalign, but aligns automatically to page boundary 
+       if the size is "big enough", around the pagesize. */
+    if (size < pagesize) size = pagesize;
     code = (char*)malloc(size);
     if ((int)code & (pagesize-1)) { /* need to align it manually to 0x1000 */
         int newsize = pagesize - ((int)code & (pagesize-1));

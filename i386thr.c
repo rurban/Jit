@@ -41,13 +41,11 @@ epilog after final Perl_despatch_signals
 
 /* my_perl already on stack, Iop at 4(%ebx) */
 T_CHARARR x86thr_prolog[] = { 
-    push_ebp,		/* save frame pointer*/
-    mov_esp_ebp,	/* set new frame pointer */
+    enter_8,
     push_edi,                                  
     push_esi,                                  
     push_ebx,		/* &my_perl */     
     push_ecx,                                  
-    sub_x_esp(8),       /* room for 2 locals: op, p */
     mov_rebp_ebx(8)     /* mov 0x8(%ebp),%ebx my_perl */
 #ifdef HAVE_DISPATCH
     ,mov_mem_4ebp(0)
@@ -55,13 +53,11 @@ T_CHARARR x86thr_prolog[] = {
 };
 unsigned char *push_prolog(unsigned char *code) {
     unsigned char prolog[] = {
-        push_ebp,		/* save frame pointer*/
-        mov_esp_ebp,	/* set new frame pointer */
+        enter_8,
         push_edi,                                  
         push_esi,                                  
         push_ebx,		/* &my_perl */     
         push_ecx,                                  
-        sub_x_esp(8),	     /* room for 2 locals: op, p */
         mov_rebp_ebx(8)    /* mov 0x8(%ebp),%ebx my_perl */
 #ifdef HAVE_DISPATCH
         ,mov_mem_4ebp(&PL_sig_pending)
@@ -72,7 +68,6 @@ unsigned char *push_prolog(unsigned char *code) {
 }
 
 T_CHARARR x86thr_epilog[] = {
-    add_x_esp(8),
     pop_ecx,
     pop_ebx,
     pop_esi,

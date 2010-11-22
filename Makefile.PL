@@ -18,7 +18,7 @@ if ($^O eq 'darwin') {
 my $obj = $Config{obj_ext};
 sub check_cc {
   my $sym = shift;
-  open C, ">", "test.c";
+  open C, ">test.c"; #5.6.2: Too many arguments for open at Makefile.PL line 21, near ""test.c";"
   print C << "EOF";
 #include "EXTERN.h"
 #include "perl.h"

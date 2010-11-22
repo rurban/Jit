@@ -32,11 +32,9 @@ epilog:
 /* Usage: sizeof(PROLOG) + PUSHc(PROLOG) */
 
 T_CHARARR x86_prolog[] = {
-    push_ebp,		/* save frame pointer */	
-    mov_esp_ebp,	/* set new frame pointer */
+    enter_8,
     push_ebx,		
     push_ecx,		/* temp op->next */
-    sub_x_esp(8),
     mov_mem_ebx(0)	/* &PL_op  */
 #ifdef HAVE_DISPATCH
     ,mov_mem_4ebp(0)	/* &PL_sig_pending */
@@ -45,11 +43,9 @@ T_CHARARR x86_prolog[] = {
 
 unsigned char * push_prolog(unsigned char *code) {
     unsigned char prolog[] = {
-        push_ebp,
-        mov_esp_ebp,
+        enter_8,
         push_ebx,	/* &PL_op */
         push_ecx,
-        sub_x_esp(8),
         mov_mem_ebx(&PL_op)
 #ifdef HAVE_DISPATCH
         ,mov_mem_4ebp(&PL_sig_pending)
@@ -60,9 +56,6 @@ unsigned char * push_prolog(unsigned char *code) {
 }
 
 T_CHARARR x86_epilog[] = {
-#ifdef HAVE_DISPATCH
-    add_x_esp(8),
-#endif
     pop_ecx,
     pop_ebx,
     leave,		/* restore esp */
