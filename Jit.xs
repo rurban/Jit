@@ -33,10 +33,11 @@ typedef unsigned char CODE;
 #define ALIGN_64(c) (c%64?(c+(64-c%64)):c) 
 #define ALIGN_N(n,c) (c%n?(c+(n-c%n)):c) 
 
+HV* otherops = NULL;
 typedef struct jmptarget {
     OP   *op;       /* the target op */
     char *label;    /* XXX not sure if need this */
-    CODE *target; /* the code points for label (run-time lookup for goto XS and goto label) */
+    CODE *target;   /* the code points for label (run-time lookup for goto XS and goto label) */
 } JMPTGT;
 int jmpix = 0;
 JMPTGT *jmptargets = NULL;
@@ -47,16 +48,16 @@ typedef struct loopstack {
     CODE *redoop;
 } LOOPTGT;
 int loopix = 0;
-JMPTGT *looptargets = NULL;
+LOOPTGT *looptargets = NULL;
 
 #define PUSH_JMP(jmp)                                                  \
-    jmptargets = (JMPTGT*)realloc(jmptargets, ++jmpix*sizeof(JMPTGT)); \
-    memcpy(&jmptargets[jmpix], &jmp, sizeof(JMPTGT))
-#define POP_JMP 	(jmpix > 0 ? &jmptargets[jmpix--] : NULL)
+    jmptargets = (JMPTGT*)realloc(jmptargets, (jmpix+1)*sizeof(JMPTGT)); \
+    memcpy(&jmptargets[jmpix], &jmp, sizeof(JMPTGT)); jmpix++
+#define POP_JMP 	(jmpix >= 0 ? &jmptargets[jmpix--] : NULL)
 #define PUSH_LOOP(cx)                                                  \
-    looptargets = (LOOPTGT*)realloc(looptargets, ++loopix*sizeof(LOOPTGT)); \
-    memcpy(&looptargets[loopix], &cx, sizeof(LOOPTGT))
-#define POP_LOOP 	(loopix > 0 ? &looptargets[loopix--] : NULL)
+    looptargets = (LOOPTGT*)realloc(looptargets, (loopix+1)*sizeof(LOOPTGT)); \
+    memcpy(&looptargets[loopix], &cx, sizeof(LOOPTGT)); loopix++
+#define POP_LOOP 	(loopix >= 0 ? &looptargets[loopix--] : NULL)
 
 #ifdef DEBUGGING
 int global_label;
@@ -221,6 +222,7 @@ T_CHARARR NOP[]      = {0x90};    /* nop */
 
 /* PROLOG */
 #define enter           0xc8
+#define enter_8         0xc8,0x08,0x00,0x00
 #define push_rbp    	0x55
 #define mov_rsp_rbp 	0x48,0x89,0xe5
 #define push_r12 	0x41,0x54
@@ -757,8 +759,7 @@ jit_chain(pTHX_
         /* other before next */
 	if (maybranch(op)) {
             int lsize;
-            HV* otherops = NULL;
-            SV *keysv = newSViv(PTR2IV(&op));
+            SV *keysv = newSViv(PTR2IV(op));
 	    if (!dryrun) {
                 dbg_cline1("if (PL_op == op/*->op_next*/) goto next_%d;\n", global_label);
 		dbg_stabs1("if (PL_op == op->next) goto next_%d;", global_label);

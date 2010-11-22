@@ -56,7 +56,7 @@ unsigned char *push_prolog(unsigned char *code) {
         enter_8,
         push_edi,                                  
         push_esi,                                  
-        push_ebx,		/* &my_perl */     
+        push_ebx,	   /* &my_perl */     
         push_ecx,                                  
         mov_rebp_ebx(8)    /* mov 0x8(%ebp),%ebx my_perl */
 #ifdef HAVE_DISPATCH

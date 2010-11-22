@@ -32,11 +32,9 @@ is in %rdi, not on the stack.
 */
 
 T_CHARARR amd64thr_prolog[] = {
-    push_rbp,
-    mov_rsp_rbp,
+    enter_8,
     push_rbx,
     mov_rax_rbx       /* my_perl => rbx */
-    /*sub_x_rsp(0x20)*/
 #ifdef HAVE_DISPATCH
     ,push_rcx		/* &sigpending (myperl[xx]) => rcx */
 #endif
@@ -50,7 +48,6 @@ T_CHARARR amd64thr_epilog[] = {
 #ifdef HAVE_DISPATCH
     pop_rcx,
 #endif
-    /*add_x_esp(0x20),*/
     pop_rbx,
     leave,
     ret
