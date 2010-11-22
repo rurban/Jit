@@ -1,3 +1,13 @@
+v0.04_08 2010-11-22 rurban
+
+work on non-local jumps: GOTO and loops, new test 4.t
+memalign fixes for openbsd: use size == pagesize when memalign==malloc
+fixed maybranch for the logop else case (3.t test 1/2).
+use high-level enter 8,0 paired to leave.
+HV* otherops to check against recursion loops.
+better tests: fix for spaces in path, 5.6: -MBlib workaround
+improved make clean
+
 v0.04_07 2010-11-18 rurban
 
 fixes for <5.10: CopLABEL, push_arg1

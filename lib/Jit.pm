@@ -8,7 +8,7 @@
 #      Assemble into a mprotected string and call into it instead of the runloop
 
 package Jit;
-our $VERSION = '0.04_07';
+our $VERSION = '0.04_08';
 require DynaLoader;
 use vars qw( @ISA $VERSION );
 @ISA = qw(DynaLoader);
@@ -23,21 +23,20 @@ Jit the perl5 runops loop in proper execution order
 
 =head1 DESCRIPTION
 
-WARNING: It does only work yet for simple functions! No branches.
+WARNING: It does only work yet for simple functions! No branches, no non-local jumps.
 Only intel CPU's 32 and 64bit (i386 and amd64).
 
 This perl5 jitter is super-simple.
 
-The compiled optree from the perl5 parser is a linked list in memory in
+The original compiled optree from the perl5 parser is a linked list in memory in
 non-execution order, with wide-spread jumps, almost in reverse order.
-Additionally the calls are indirect, and with a shared libperl even far,
-which is stops the CPU prefetching.
+Additionally the calls are indirect, and with a shared libperl even far, which
+is stops the CPU prefetching.
 
-The jitter properly aligns the run-time calls in linear "exec" order,
+This Jit module properly aligns the run-time calls in linear "exec" order,
 so that the CPU can prefetch the next (and other) instructions.
-
-The old indirect far call costs about 70 cycles,
-the new direct call near costs 3-5 cycles and enable CPU prefetching.
+The old indirect far call within a shared libperl costs about 70 cycles,
+the new direct call near costs 3-5 cycles and enables CPU prefetching.
 
 Speed up:
   See http://blogs.perl.org/users/rurban/2010/11/performance-hacks.html
