@@ -70,7 +70,7 @@ T_CHARARR amd64_prolog[] = {
 #ifdef HAVE_DISPATCH
     push_rcx,
 #endif
-    push_r12, 		/* op->next */
+    push_r12 		/* op->next */
 #ifdef HAVE_DISPATCH	/* &PL_sig_pending */
     ,mov_mem_ecx, fourbyte
 #endif

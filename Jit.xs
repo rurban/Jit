@@ -114,7 +114,7 @@ not-threaded:
   OP *op;
   int *p = &Perl_Isig_pending_ptr;
 if maybranch:
-  op = PL_op->next; 	     # save away at ecx to check
+  op = PL_op->op_next; 	     # save away at ecx to check
   PL_op = Perl_pp_opname();  # returns op_next, op_other, op_first, op_last 
 			     # or a new optree start
   if (dispatch_needed) 
@@ -387,7 +387,7 @@ T_CHARARR NOP[]      = {0x90};    /* nop */
 # include "i386.c"
 #endif
 
-/* cmp returned op == op->next => jmp */
+/* save op = op->next */
 T_CHARARR maybranch_plop[] = {
     mov_mem_ecx(0)
 };
@@ -396,7 +396,7 @@ push_maybranch_plop(CODE *code, OP* next) {
     CODE maybranch_plop[] = {
 	mov_mem_ecx_0};
     PUSHc(maybranch_plop);
-    PUSHrel(next);
+    PUSHrel(&next);
     return code;
 }
 T_CHARARR maybranch_check[] = {
@@ -760,21 +760,21 @@ jit_chain(pTHX_
 	if (maybranch(op)) {
             int lsize;
             SV *keysv = newSViv(PTR2IV(op));
-	    if (!dryrun) {
-                dbg_cline1("if (PL_op == op/*->op_next*/) goto next_%d;\n", global_label);
-		dbg_stabs1("if (PL_op == op->next) goto next_%d;", global_label);
-	    }
             /* XXX avoid cyclic loops of already jitted other ops:
                and => nextstate, cond_expr => enter, ... */
             if (!otherops)  {
                 otherops = newHV();
             }
             if (hv_exists_ent(otherops, keysv, 0)) {
-                DEBUG_v( printf("# %s already jitted\n", PL_op_name[op->op_type]));
+                DEBUG_v( printf("# %s 0x%x already jitted, code=0x%x\n", PL_op_name[op->op_type],
+                                op, code));
                 goto OUT;
             } else {
                 hv_store_ent(otherops, keysv, &PL_sv_yes, 0); 
             }
+	    if (!dryrun) {
+		dbg_lines1("if (PL_op == op->op_next) goto next_%d;", global_label);
+	    }
 	    if ((PL_opargs[op->op_type] & OA_CLASS_MASK) == OA_LOGOP) {
                 if (dryrun) {
                     DEBUG_v( printf("# other_%d: %s => %s\n", global_label,
@@ -793,14 +793,12 @@ jit_chain(pTHX_
                     DEBUG_v( printf("# other_%d: %s\tsize=%x\n", global_label,
                                     PL_op_name[logop->op_other->op_type], other));
                     code = (CODE*)JIT_CHAIN(logop->op_other, code, code_start);
-                    dbg_lines1("goto branch_%d;", global_label);
+                    dbg_lines1("goto next_%d;", global_label);
                     next = JIT_CHAIN(logop->op_next, NULL, NULL);  /* sizeof next */
                     DEBUG_v( printf("# next_%d: %s\tsize=%x\n", global_label, 
                                     PL_op_name[logop->op_next->op_type], next));
                     code = push_gotorel(code, next);
                     dbg_lines1("next_%d:", global_label);
-                    next = JIT_CHAIN(logop->op_next, code, code_start);
-                    dbg_lines1("branch_%d:", global_label);
                 }
 	    } else { /* special branches */
 		int next;
@@ -1056,7 +1054,7 @@ Perl_runops_jit(pTHX)
 #ifdef DEBUGGING
     fh = fopen("run-jit.c", "a");
     fprintf(fh,
-            "struct op { OP* op_next; OP* op_last } OP;"
+            "struct op { OP* op_next; OP* op_other } OP;"
 #ifdef USE_ITHREADS
 	    "struct PerlInterpreter { OP* IOp; };"
 #endif
