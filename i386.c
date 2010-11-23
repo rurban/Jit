@@ -34,7 +34,7 @@ epilog:
 T_CHARARR x86_prolog[] = {
     enter_8,
     push_ebx,		
-    push_ecx,		/* temp op->next */
+    push_ecx,		/* temp op->next, XXX volatile */
     mov_mem_ebx(0)	/* &PL_op  */
 #ifdef HAVE_DISPATCH
     ,mov_mem_4ebp(0)	/* &PL_sig_pending */
@@ -46,7 +46,7 @@ unsigned char * push_prolog(unsigned char *code) {
         enter_8,
         push_ebx,	/* &PL_op */
         push_ecx,
-        mov_mem_ebx(&PL_op)
+        mov_mem_ebx(&PL_op) /* %ebx *IS* preserved across function calls */
 #ifdef HAVE_DISPATCH
         ,mov_mem_4ebp(&PL_sig_pending)
 #endif

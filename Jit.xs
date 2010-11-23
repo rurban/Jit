@@ -387,7 +387,9 @@ T_CHARARR NOP[]      = {0x90};    /* nop */
 # include "i386.c"
 #endif
 
-/* save op = op->next */
+/* save op = op->next 
+   XXX %ecx is not preserved between function calls. Need to use the stack
+*/
 T_CHARARR maybranch_plop[] = {
     mov_mem_ecx(0)
 };
@@ -638,33 +640,31 @@ jit_chain(pTHX_
                 dbg_lines("debstack();");
             }
         }
-        if (DEBUG_t_TEST_) {
+# endif
+        if (DEBUG_t_TEST_ && op) {
             T_CHARARR push_arg1[] = { push_arg1_mem };
-#  ifdef USE_ITHREADS
+# ifdef USE_ITHREADS
             T_CHARARR push_arg2[] = { push_arg2_mem };
-#  endif
+# endif
             if (dryrun) {
-#  ifdef USE_ITHREADS
+# ifdef USE_ITHREADS
                 size += sizeof(push_arg2);
-#  else
+# else
                 size += sizeof(push_arg1);
-#  endif
+# endif
                 size += PUSH_SIZE + sizeof(CALL) + CALL_SIZE;
             } else {
-                if (op) {
-#  ifdef USE_ITHREADS
-                    PUSHc(push_arg2);
-#  else
-                    PUSHc(push_arg1);
-#  endif
-                    PUSHabs(op);
-                    CALL_ABS(&Perl_debop);
-                    DEBUG_v( printf("# debop(%x) %s\n", op, (char*)PL_op_name[op->op_type]));
-                }
+# ifdef USE_ITHREADS
+                PUSHc(push_arg2);
+# else
+                PUSHc(push_arg1);
+# endif
+                PUSHabs(op);
+                CALL_ABS(&Perl_debop);
+                DEBUG_v( printf("# debop(%x) %s\n", op, (char*)PL_op_name[op->op_type]));
                 dbg_lines("debop(PL_op);");
             }
         }
-# endif
 #endif
 
 	if (op->op_type == OP_NULL) continue;
@@ -682,6 +682,7 @@ jit_chain(pTHX_
                 cx.op = op;
                 cx.label = label;
                 cx.target = code;
+                DEBUG_v( printf("# push jmp label %s at 0x%x for 0x%x\n", label, code, op));
                 PUSH_JMP(cx);
             }
         }
@@ -690,6 +691,7 @@ jit_chain(pTHX_
             cx.op = op;
             cx.label = NULL;
             cx.target = code;
+            DEBUG_v( printf("# push jmp at 0x%x for op=0x%x\n", code, op));
             PUSH_JMP(cx);
         }
 	
@@ -1198,16 +1200,17 @@ Perl_runops_jit(pTHX)
     /* gdb: disassemble code code+200 */
 #if defined(DEBUGGING) && defined(DEBUG_v_TEST)
     if (DEBUG_v_TEST) {
-        DEBUG_v( printf("# &PL_op   \t= 0x%x / *0x%x\n",&PL_op, PL_op) );
+        DEBUG_v( printf("# &PL_op   \t= 0x%x / *0x%x\n", &PL_op, PL_op) );
+        DEBUG_t( printf("# debop   \t= 0x%x\n", &Perl_debop) );
 #ifdef USE_ITHREADS
-        DEBUG_v( printf("# &my_perl \t= 0x%x / *0x%x\n",&my_perl, my_perl) );
+        DEBUG_v( printf("# &my_perl \t= 0x%x / *0x%x\n", &my_perl, my_perl) );
 #endif
         DEBUG_v( printf("# code() 0x%x size %d",code,size) );
         for (i=0; i < size; i++) {
             if (!(i % 8)) DEBUG_v( printf("\n#(code+%3d): ", i) );
             DEBUG_v( printf("%02x ",code[i]) );
         }
-        DEBUG_v( printf("\n# runops_jit_%d\n", global_loops-1) );
+        DEBUG_v( printf("\n# runops_jit_%d\n",global_loops-1) );
     }
 
     /* How to disassemble per command line:

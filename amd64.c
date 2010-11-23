@@ -68,7 +68,7 @@ Dump of assembler code from 0x1127000 to 0x1127058:
 T_CHARARR amd64_prolog[] = {
     enter_8,
 #ifdef HAVE_DISPATCH
-    push_rcx,
+    push_rcx,		/* volatile, but ok for &PL_sig_pending check */
 #endif
     push_r12 		/* op->next */
 #ifdef HAVE_DISPATCH	/* &PL_sig_pending */
@@ -119,16 +119,12 @@ T_CHARARR amd64_dispatch[] = {
 
 T_CHARARR maybranch_plop[] = {
     mov_mem_r12, fourbyte
-    /*,mov_eax_8ebp*/
 };
 unsigned char *push_maybranch_plop(unsigned char *code, OP* next) {
     T_CHARARR maybranch_plop1[] = {
 	mov_mem_r12};
-    /*T_CHARARR maybranch_plop2[] = {
-	mov_eax_8ebp};*/
     PUSHc(maybranch_plop1);
     PUSHabs(next);
-    /*PUSHc(maybranch_plop2);*/
     return code;
 }
 T_CHARARR maybranch_check[] = {
@@ -138,7 +134,7 @@ T_CHARARR maybranch_check[] = {
 unsigned char *
 push_maybranch_check(unsigned char *code, int next) {
     unsigned char maybranch_check[] = {
-	cmp_rax_r12,
+	cmp_rax_r12, 	/* saved prev op->next in r12 */
 	je_0};
     if (abs(next) > 128) {
         printf("ERROR: je overflow %d > 128\n", next);
