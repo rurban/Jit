@@ -13,17 +13,20 @@ my $thr = $Config{useithreads};
   print "1..2\n";
 #}
 
-my $p = q( -e 'my $a = 1; if ($a > 2) { die "nok ok 1\n"; } else { print "ok 1\n"; }' );
+my $p = q( -e 'my $a = 1; if ($a > 2) { print q(nok ok 1); } else { print q(ok 1); }' );
 $c .= " -Dv" if $dbg and $] > 5.008;
 
 print "# gdb --args $c $p\n" if $dbg;
-print !system(qq($c $p)) ? " " : "not ok 1";
-print "\t#", ($thr ? "TODO ":"TODO "),"branch next\n";
+print !system(qq($c $p)) ? " " : "not ok 1 ";
+print "# branch next\n";
 
-$p = q( -e 'my $a = 1; if ($a > 2) { print q(not ok); } else { q(print "ok 2\n"); }' );
-my $result = `$c $p`;
-if ($result =~ /^ok/) {
-  print $result;
-} else {
-  print "not ok 2\t#TODO maybranch other\n";
-}
+$p = q( -e 'my $a = 1; if ($a < 2) { print q(ok 2); } else { print q(not ok 2); }' );
+#my $result = `$c $p`;
+print "# gdb --args $c $p\n" if $dbg;
+print !system(qq($c $p)) ? " " : "not ok 2 ";
+print "# branch other\n";
+#if ($result =~ /^ok/) {
+#  print $result,"\n";
+#} else {
+#  print "not ok 2\t#TODO maybranch other\n";
+#}

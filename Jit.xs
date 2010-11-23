@@ -641,30 +641,32 @@ jit_chain(pTHX_
             }
         }
 # endif
+# if defined(DEBUG_s_TEST_)
         if (DEBUG_t_TEST_ && op) {
             T_CHARARR push_arg1[] = { push_arg1_mem };
-# ifdef USE_ITHREADS
+#  ifdef USE_ITHREADS
             T_CHARARR push_arg2[] = { push_arg2_mem };
-# endif
+#  endif
             if (dryrun) {
-# ifdef USE_ITHREADS
+#  ifdef USE_ITHREADS
                 size += sizeof(push_arg2);
-# else
+#  else
                 size += sizeof(push_arg1);
-# endif
+#  endif
                 size += PUSH_SIZE + sizeof(CALL) + CALL_SIZE;
             } else {
-# ifdef USE_ITHREADS
+#  ifdef USE_ITHREADS
                 PUSHc(push_arg2);
-# else
+#  else
                 PUSHc(push_arg1);
-# endif
+#  endif
                 PUSHabs(op);
                 CALL_ABS(&Perl_debop);
                 DEBUG_v( printf("# debop(%x) %s\n", op, (char*)PL_op_name[op->op_type]));
                 dbg_lines("debop(PL_op);");
             }
         }
+# endif
 #endif
 
 	if (op->op_type == OP_NULL) continue;
@@ -700,7 +702,7 @@ jit_chain(pTHX_
 		size += sizeof(maybranch_plop);
 	    } else {
                 /* store op->next in ecx. cmp returned op = op->next => jmp */
-                DEBUG_v( printf("# maybranch %s\t= 0x%x\n", opname, op->op_ppaddr));
+                DEBUG_v( printf("# maybranch %s:\n", opname, op->op_ppaddr));
                 dbg_lines("op = PL_op->op_next;");
 		code = push_maybranch_plop(code, op->op_next);
 	    }
@@ -767,21 +769,19 @@ jit_chain(pTHX_
             if (!otherops)  {
                 otherops = newHV();
             }
-            if (hv_exists_ent(otherops, keysv, 0)) {
-                DEBUG_v( printf("# %s 0x%x already jitted, code=0x%x\n", PL_op_name[op->op_type],
-                                op, code));
-                goto OUT;
-            } else {
-                hv_store_ent(otherops, keysv, &PL_sv_yes, 0); 
-            }
 	    if (!dryrun) {
+                if (hv_exists_ent(otherops, keysv, 0)) {
+                    DEBUG_v( printf("# %s 0x%x already jitted, code=0x%x\n", PL_op_name[op->op_type],
+                                    op, code));
+                    /* XXX when is a jmp to this op needed? patch later or use the code addr from the hash */
+                    goto OUT;
+                } else {
+                    hv_store_ent(otherops, keysv, newSViv((int)code), 0);
+                }
 		dbg_lines1("if (PL_op == op->op_next) goto next_%d;", global_label);
 	    }
 	    if ((PL_opargs[op->op_type] & OA_CLASS_MASK) == OA_LOGOP) {
                 if (dryrun) {
-                    DEBUG_v( printf("# other_%d: %s => %s\n", global_label,
-                                    PL_op_name[op->op_type],
-                                    PL_op_name[cLOGOPx(op)->op_other->op_type]));
                     size += sizeof(maybranch_check);
                     size += JIT_CHAIN(cLOGOPx(op)->op_other, NULL, NULL);
                     size += sizeof(GOTOREL);
@@ -789,11 +789,13 @@ jit_chain(pTHX_
                     int next, other;
                     LOGOP* logop;
                     logop = cLOGOPx(op);
+                    DEBUG_v( printf("# other_%d: %s => %s, ", global_label,
+                                    PL_op_name[op->op_type],
+                                    PL_op_name[cLOGOPx(op)->op_other->op_type]));
                     other = JIT_CHAIN(logop->op_other, NULL, NULL); /* sizeof other */
                     other += sizeof(GOTOREL);
                     code = push_maybranch_check(code, other); /* if cmp: je => next */
-                    DEBUG_v( printf("# other_%d: %s\tsize=%x\n", global_label,
-                                    PL_op_name[logop->op_other->op_type], other));
+                    DEBUG_v( printf("\tsize=%x\n", other) );
                     code = (CODE*)JIT_CHAIN(logop->op_other, code, code_start);
                     dbg_lines1("goto next_%d;", global_label);
                     next = JIT_CHAIN(logop->op_next, NULL, NULL);  /* sizeof next */
