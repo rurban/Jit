@@ -42,10 +42,10 @@ epilog after final Perl_despatch_signals
 /* my_perl already on stack, Iop at 4(%ebx) */
 T_CHARARR x86thr_prolog[] = { 
     enter_8,
-    push_edi,                                  
-    push_esi,                                  
+    push_edi,           /* arg1 */                       
+    push_esi,           /* arg2 */                       
     push_ebx,		/* &my_perl */     
-    push_ecx,                                  
+    push_ecx,           /* &PL_sig_pending */                       
     mov_rebp_ebx(8)     /* mov 0x8(%ebp),%ebx my_perl */
 #ifdef HAVE_DISPATCH
     ,mov_mem_4ebp(0)

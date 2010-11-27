@@ -1,3 +1,11 @@
+v0.04_08 2010-11-27 rurban
+
+%rbx on amd64 seems not be save across function calls. 
+  store op->next on 0(%rsp) ("the local stack")
+prevent also dryrun from recursive cycles, but with a different HV
+re-work and document MAYBRANCH ops, sync with new Opcodes-0.10
+  use simple GOTO as default (searches at run-time in targets)
+
 v0.04_08 2010-11-22 rurban
 
 work on non-local jumps: GOTO and loops, new test 4.t

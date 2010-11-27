@@ -34,6 +34,7 @@ typedef unsigned char CODE;
 #define ALIGN_N(n,c) (c%n?(c+(n-c%n)):c) 
 
 HV* otherops = NULL;
+HV* otherops1 = NULL;
 typedef struct jmptarget {
     OP   *op;       /* the target op */
     char *label;    /* XXX not sure if need this */
@@ -223,11 +224,11 @@ T_CHARARR NOP[]      = {0x90};    /* nop */
 /* PROLOG */
 #define enter           0xc8
 #define enter_8         0xc8,0x08,0x00,0x00
+#define push_rcx	0x51
+#define push_rbx 	0x53
 #define push_rbp    	0x55
 #define mov_rsp_rbp 	0x48,0x89,0xe5
 #define push_r12 	0x41,0x54
-#define push_rbx 	0x53
-#define push_rcx	0x51
 #define mov_rax_rbx     0x48,0x89,0xc3
 #define sub_x_rsp(byte) 0x48,0x83,0xec,byte
 #define add_x_esp(byte) 0x48,0x83,0xc4,byte
@@ -288,11 +289,15 @@ T_CHARARR NOP[]      = {0x90};    /* nop */
 #define jmpq	        0xe9        /* fourbyte */
 
 
-#define mov_mem_r12	0x41,0xbc 	/* movq PL_op->next, %r12 */
+#define mov_mem_rrsp    0xc7,0x04,0x24	/* store op->next on stack */
 #define mov_eax_4ebp 	0x89,0x45,0xfc
+#define mov_mem_r12	0x41,0xbc 	/* movq PL_op->next, %r12 */
 #define cmp_rax_r12     0x49,0x39,0xc4
+#define cmp_rax_rrsp    0x48,0x39,0x44,0x24,0x00 /* check returned op against stack */
 #define je_0        	0x74
 #define je(byte)        0x74,(byte)
+#define jew_0        	0x0f,0x84
+#define jew(word)       0x0f,0x84,revword4(word)
 
 /* mov    %rax,(%rbx) &PL_op in ebx */
 #define mov_rax_memr    0x48,0x89,0x05 /* + 4 rel */
@@ -329,11 +334,11 @@ T_CHARARR NOP[]      = {0x90};    /* nop */
 
 /* PROLOG */
 #define enter_8         0xc8,0x08,0x00,0x00
+#define push_ebx 	0x53
 #define push_ebp    	0x55
 #define mov_esp_ebp 	0x89,0xe5
 #define push_edi 	0x57
 #define push_esi	0x56
-#define push_ebx 	0x53
 #define push_ecx	0x51
 #define sub_x_esp(byte) 0x83,0xec,byte
 #define mov_eax_rebx	0x89,0x03	/* mov    %rax,(%rbx) &PL_op in ebx */
@@ -411,7 +416,11 @@ push_maybranch_check(CODE *code, int next) {
 	cmp_ecx_eax,
 	je_0};
     if (abs(next) > 128) {
-        printf("ERROR: je overflow %d > 128\n", next);
+        CODE maybranch_checkw[] = {
+            cmp_ecx_eax,
+            jew_0};
+        PUSHc(maybranch_checkw);
+        PUSHrel(next);
     } else {
         PUSHc(maybranch_check);
         PUSHbyte(next);
@@ -517,37 +526,45 @@ maybranch(OP* op) {
 #ifdef BYPASS_MAYBRANCH
     return 0; 			/* for TESTING only */
 #endif
-    switch (op->op_type) { 	/* sync this list with Opcodes-0.04 */
-    case OP_SUBST:
-    case OP_SUBSTCONT:
-    case OP_DEFINED:
-    case OP_FORMLINE:
-    case OP_GREPSTART:
-    case OP_GREPWHILE:
-    case OP_MAPWHILE:
-    case OP_AND:
-    case OP_OR:
-    case OP_COND_EXPR:
-    case OP_ANDASSIGN:
-    case OP_ORASSIGN:
+    switch (op->op_type) { 	/* XXX sync this list with Opcodes.pm */
+    case OP_SUBSTCONT:		/* LOGOP other or next */
+    case OP_GREPWHILE:		/* LOGOP other or next */
+    case OP_MAPWHILE:		/* LOGOP other or next */
+    case OP_AND:		/* LOGOP other or next */
+    case OP_OR:			/* LOGOP other or next */
+    case OP_COND_EXPR:		/* LOGOP other or next */
+    case OP_ANDASSIGN:		/* LOGOP other or next */
+    case OP_ORASSIGN:		/* LOGOP other or next */
 #if PERL_VERSION > 8
-    case OP_DOR:
-    case OP_DORASSIGN:
+    case OP_DOR:		/* LOGOP other or next */
+    case OP_DORASSIGN:		/* LOGOP other or next */
+    case OP_ENTERWHEN:		/* LOGOP other or next */
+    case OP_ENTERGIVEN:		/* LOGOP other or next */
+    case OP_ONCE:		/* LOGOP other or next */
 #endif
+    case OP_RANGE:		/* LOGOP other or next */
+    /* static */
+    case OP_FLIP:		/* first->other or next. not tested */
+    case OP_SUBST:		/* pmreplroot or other or next. nyi */
+    case OP_ENTERSUB:           /* CvSTART(cv)|autoload or next */
+    case OP_DUMP: 		/* main_start. XXX makes no sense to support */
+    case OP_FORMLINE:		/* initially only: doparseform */
+    case OP_GREPSTART:		/* next->next or next->other */
+    /* contexts */    
+    case OP_ENTERLOOP:		/* LOOPOP cx->redoop|lastop|nextop */
+    case OP_ENTERITER:		/* LOOPOP cx->redoop|lastop|nextop */
+    case OP_LAST:		/* LOOPOP cx->lastop->next or cx->blk_sub|eval|format.retop */
+    case OP_NEXT:		/* LOOPOP cx->nextop */
+    case OP_REDO:		/* LOOPOP cx->redoop but if enter, enter->next */
+    case OP_RETURN:		/* cx->blk_sub|eval|format.retop */
     case OP_DBSTATE:
-    case OP_RETURN:
-    case OP_LAST:
-    case OP_NEXT:
-    case OP_REDO:
-    case OP_DUMP: /* makes no sense to support */
-    case OP_GOTO:
-    case OP_REQUIRE: /* ? */
-    case OP_ENTEREVAL:
-    case OP_ENTERTRY:
-#if PERL_VERSION > 8
-    case OP_ENTERWHEN:
-    case OP_ONCE:
-#endif
+    case OP_CONTINUE:		/* cx->blk_givwhen.leaveop */
+    case OP_REQUIRE: 		/* ? */
+    case OP_ENTEREVAL:		/* cx->blk_eval.retop */
+    case OP_ENTERTRY:		/* cx->blk_eval.retop */
+    case OP_GOTO:		/* cx->blk_sub.retop or CvSTART(cv)|autoload or findlabel */
+    case OP_LEAVEEVAL: 		/* ? */
+    case OP_BREAK: 		/* ? */
         return 1;
     default:
         return 0;
@@ -671,8 +688,9 @@ jit_chain(pTHX_
 
 	if (op->op_type == OP_NULL) continue;
 
-        /* check labels -> store jmp targets. ignore dbstate for now (-d -MJit) */
-	if (!dryrun && (op->op_type == OP_NEXTSTATE)) {
+        /* check labels -> store jmp targets. 
+           Note: nextstate can also be normal jmp target as enter */
+	if (!dryrun && ((op->op_type == OP_NEXTSTATE)|(op->op_type == OP_DBSTATE))) {
             char *label;
             JMPTGT cx;
 #ifdef CopLABEL
@@ -684,7 +702,13 @@ jit_chain(pTHX_
                 cx.op = op;
                 cx.label = label;
                 cx.target = code;
-                DEBUG_v( printf("# push jmp label %s at 0x%x for 0x%x\n", label, code, op));
+                DEBUG_v( printf("#  push jmp label %s at 0x%x for nextstate 0x%x\n", label, code, op));
+                PUSH_JMP(cx);
+            } else {
+                cx.op = op;
+                cx.label = NULL;
+                cx.target = code;
+                DEBUG_v( printf("#  push jmp at 0x%x for nextstate op=0x%x\n", code-code_start, op));
                 PUSH_JMP(cx);
             }
         }
@@ -693,7 +717,7 @@ jit_chain(pTHX_
             cx.op = op;
             cx.label = NULL;
             cx.target = code;
-            DEBUG_v( printf("# push jmp at 0x%x for op=0x%x\n", code, op));
+            DEBUG_v( printf("#  push jmp at 0x%x for enter op=0x%x\n", code-code_start, op));
             PUSH_JMP(cx);
         }
 	
@@ -701,7 +725,7 @@ jit_chain(pTHX_
 	    if (dryrun) {
 		size += sizeof(maybranch_plop);
 	    } else {
-                /* store op->next in ecx. cmp returned op = op->next => jmp */
+                /* store op->next at 0(%esp). cmp returned op = op->next => jmp */
                 DEBUG_v( printf("# maybranch %s:\n", opname, op->op_ppaddr));
                 dbg_lines("op = PL_op->op_next;");
 		code = push_maybranch_plop(code, op->op_next);
@@ -768,8 +792,15 @@ jit_chain(pTHX_
                and => nextstate, cond_expr => enter, ... */
             if (!otherops)  {
                 otherops = newHV();
+                otherops1 = newHV();
             }
-	    if (!dryrun) {
+	    if (dryrun) {
+                if (hv_exists_ent(otherops1, keysv, 0)) {
+                    goto OUT;
+                } else {
+                    hv_store_ent(otherops1, keysv, newSViv((int)code), 0);
+                }
+            } else {
                 if (hv_exists_ent(otherops, keysv, 0)) {
                     DEBUG_v( printf("# %s 0x%x already jitted, code=0x%x\n", PL_op_name[op->op_type],
                                     op, code));
@@ -795,11 +826,11 @@ jit_chain(pTHX_
                     other = JIT_CHAIN(logop->op_other, NULL, NULL); /* sizeof other */
                     other += sizeof(GOTOREL);
                     code = push_maybranch_check(code, other); /* if cmp: je => next */
-                    DEBUG_v( printf("\tsize=%x\n", other) );
+                    DEBUG_v( printf("size=%x\n", other) );
                     code = (CODE*)JIT_CHAIN(logop->op_other, code, code_start);
                     dbg_lines1("goto next_%d;", global_label);
                     next = JIT_CHAIN(logop->op_next, NULL, NULL);  /* sizeof next */
-                    DEBUG_v( printf("# next_%d: %s\tsize=%x\n", global_label, 
+                    DEBUG_v( printf("# next_%d: %s, size=%x\n", global_label, 
                                     PL_op_name[logop->op_next->op_type], next));
                     code = push_gotorel(code, next);
                     dbg_lines1("next_%d:", global_label);
@@ -826,7 +857,7 @@ jit_chain(pTHX_
                             other = JIT_CHAIN(logop->op_other, NULL, NULL); /* sizeof other */
                             other += sizeof(GOTOREL);
                             code = push_maybranch_check(code, other); /* if cmp: je => next */
-                            DEBUG_v( printf("# other_%d: %s\tsize=%x\n", global_label,
+                            DEBUG_v( printf("# other_%d: %s, size=%x\n", global_label,
                                             PL_op_name[logop->op_other->op_type], other));
                             code = (CODE*)JIT_CHAIN(logop->op_other, code, code_start);
                         }
@@ -854,7 +885,7 @@ jit_chain(pTHX_
                         dbg_lines1("goto branch_%d;", global_label);
                         code = push_gotorel(code, lsize); /* jump to end: nextop+lastop+redoop+3*goto */
 
-                        DEBUG_v( printf("# nextop_%d: %s\tsize=%x\n", global_label, 
+                        DEBUG_v( printf("# nextop_%d: %s, size=%x\n", global_label, 
                                         PL_op_name[loop->op_nextop->op_type], lsize));
                         dbg_lines1("nextop_%d:", global_label);
                         cx.nextop = code;
@@ -872,7 +903,7 @@ jit_chain(pTHX_
                         lsize -= lastop + sizeof(CALL)+CALL_SIZE;
                         dbg_lines1("goto branch_%d;", global_label);
                         code = push_gotorel(code, lsize); /* jump to end */
-                        DEBUG_v( printf("# redoop_%d: %s\tsize=%x\n", global_label, 
+                        DEBUG_v( printf("# redoop_%d: %s, size=%x\n", global_label, 
                                         PL_op_name[loop->op_redoop->op_type], lsize));
                         cx.redoop = code;
                         dbg_lines1("redoop_%d:", global_label);
@@ -899,10 +930,30 @@ jit_chain(pTHX_
                     }
                     break;
 
-                /* The next 4 ctl ops (jumps) goto, next, last, redo are inlined, searching 
-                   for possible jump targets in  jmptargets info.
+		case OP_NEXT:
+		case OP_REDO:
+		case OP_LAST:
+                    /* XXX if not OPf_SPECIAL pop label op->pv from jmptargets (prev. called cxstack), 
+                       else just next jmp */
+                    if (dryrun) {
+                        size += sizeof(GOTOREL);
+                    } else {
+                        LOOPTGT *cx;
+                        CODE* tgtop;
+                        cx = POP_LOOP;
+                        if (op->op_type == OP_NEXT) tgtop = cx->nextop;
+                        else if (op->op_type == OP_REDO) tgtop = cx->redoop;
+                        else if (op->op_type == OP_LAST) tgtop = cx->lastop;
+                        DEBUG_v( printf("# %s %x\n", PL_op_name[op->op_type], tgtop));
+                        code = push_gotorel(code, (int)tgtop); /* jmp or rel? */
+                    }
+                    break;
+		default:
+		    warn("NYI unsupported maybranch op %s", PL_op_name[op->op_type]);
+                /* goto and other search at run-time 
+                   for possible jump targets in jmptargets info.
                    If no cx record is found, continue with the unjitted OP.
-                 */    
+                 */
 		case OP_GOTO:
 		    /* XXX We can only jump to jitted and recorded labels, else jump to unjitted code.
                        if (PL_op != ($sym)->op_next && PL_op != (OP*)0){return PL_op;} */
@@ -926,7 +977,7 @@ jit_chain(pTHX_
                         OP *retop = NULL;
                         int i = 0;
 
-                        DEBUG_v( printf("if (!op) return 0\n") );
+                        DEBUG_v( printf("# if (!op) return 0\n") );
                         dbg_lines("if (!op) return 0;");
                         PUSHc(ifop0return);
                         PUSHc(EPILOG);
@@ -945,7 +996,7 @@ jit_chain(pTHX_
 
                         /* The retop with the found label is only retrieved dynamic, within jit.
                            so we need to call jmp_search_label to get the target */
-                        if (!(op->op_flags & (OPf_STACKED|OPf_SPECIAL))) {
+                        if ((op->op_type == OP_GOTO) && !(op->op_flags & (OPf_STACKED|OPf_SPECIAL))) {
 #ifdef DEBUGGING
                             label = ((PVOP*)op)->op_pv;
                             DEBUG_v( printf("# pp_goto %s via jmp_search_label(op)\n", label));
@@ -967,26 +1018,6 @@ jit_chain(pTHX_
                         dbg_lines1("next_%d", global_label);
                     }
                     break;
-		case OP_NEXT:
-		case OP_REDO:
-		case OP_LAST:
-                    /* XXX if not OPf_SPECIAL pop label op->pv from jmptargets (prev. called cxstack), 
-                       else just next jmp */
-                    if (dryrun) {
-                        size += sizeof(GOTOREL);
-                    } else {
-                        LOOPTGT *cx;
-                        CODE* tgtop;
-                        cx = POP_LOOP;
-                        if (op->op_type == OP_NEXT) tgtop = cx->nextop;
-                        else if (op->op_type == OP_REDO) tgtop = cx->redoop;
-                        else if (op->op_type == OP_LAST) tgtop = cx->lastop;
-                        DEBUG_v( printf("# %s %x\n", PL_op_name[op->op_type], tgtop));
-                        code = push_gotorel(code, (int)tgtop); /* jmp or rel? */
-                    }
-                    break;
-		default:
-		    warn("NYI unsupported maybranch op %s", PL_op_name[op->op_type]);
 		}
 	    }
 #ifdef DEBUGGING
@@ -1209,7 +1240,7 @@ Perl_runops_jit(pTHX)
 #endif
         DEBUG_v( printf("# code() 0x%x size %d",code,size) );
         for (i=0; i < size; i++) {
-            if (!(i % 8)) DEBUG_v( printf("\n#(code+%3d): ", i) );
+            if (!(i % 8)) DEBUG_v( printf("\n#(code+%3x): ", i) );
             DEBUG_v( printf("%02x ",code[i]) );
         }
         DEBUG_v( printf("\n# runops_jit_%d\n",global_loops-1) );
@@ -1255,6 +1286,10 @@ Perl_runops_jit(pTHX)
 #else
     free(code);
 #endif
+    if (otherops)
+        sv_free(otherops);
+    if (otherops1)
+        sv_free(otherops1);
 
 #ifdef PROFILING
     if (profiling) {

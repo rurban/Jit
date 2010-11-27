@@ -89,10 +89,14 @@ T_CHARARR maybranch_check[] = {
 unsigned char *
 push_maybranch_check(unsigned char *code, int next) {
     unsigned char maybranch_check[] = {
-	cmp_rax_r12,
+	cmp_rax_rrsp,
 	je_0};
     if (abs(next) > 128) {
-        printf("ERROR: je overflow %d > 128\n", next);
+        CODE maybranch_checkw[] = {
+            cmp_rax_rrsp,
+            jew_0};
+        PUSHc(maybranch_checkw);
+        PUSHrel(next);
     } else {
         PUSHc(maybranch_check);
         PUSHbyte(next);

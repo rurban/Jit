@@ -66,11 +66,11 @@ Dump of assembler code from 0x1127000 to 0x1127058:
 */
 
 T_CHARARR amd64_prolog[] = {
-    enter_8,
+    enter_8
 #ifdef HAVE_DISPATCH
-    push_rcx,		/* volatile, but ok for &PL_sig_pending check */
+    ,push_rcx		/* volatile, but ok for &PL_sig_pending check */
 #endif
-    push_r12 		/* op->next */
+    /*,push_r12*/ 	/* op->next */
 #ifdef HAVE_DISPATCH	/* &PL_sig_pending */
     ,mov_mem_ecx, fourbyte
 #endif
@@ -78,11 +78,11 @@ T_CHARARR amd64_prolog[] = {
 
 unsigned char *push_prolog(unsigned char *code) {
     T_CHARARR prolog1[] = {
-        enter_8,
+        enter_8
 #ifdef HAVE_DISPATCH
-	push_rcx,
+	,push_rcx
 #endif
-        push_r12};
+        /*,push_r12*/};
     PUSHc(prolog1);
 #ifdef HAVE_DISPATCH
     T_CHARARR prolog2[] = {
@@ -93,7 +93,7 @@ unsigned char *push_prolog(unsigned char *code) {
     return code;
 }
 T_CHARARR amd64_epilog[] = {
-    pop_r12,
+    /*pop_r12,*/
 #ifdef HAVE_DISPATCH
     pop_rcx,
 #endif
@@ -118,26 +118,31 @@ T_CHARARR amd64_dispatch[] = {
     je(5)};
 
 T_CHARARR maybranch_plop[] = {
-    mov_mem_r12, fourbyte
+    /* r12 is not save during function calls, put it onto the local stack */
+    mov_mem_rrsp, fourbyte
 };
 unsigned char *push_maybranch_plop(unsigned char *code, OP* next) {
     T_CHARARR maybranch_plop1[] = {
-	mov_mem_r12};
+	mov_mem_rrsp};
     PUSHc(maybranch_plop1);
     PUSHabs(next);
     return code;
 }
 T_CHARARR maybranch_check[] = {
-    cmp_rax_r12,
+    cmp_rax_rrsp,
     je(0)
 };
 unsigned char *
 push_maybranch_check(unsigned char *code, int next) {
     unsigned char maybranch_check[] = {
-	cmp_rax_r12, 	/* saved prev op->next in r12 */
+	cmp_rax_rrsp, 	/* saved prev op->next at 0(%rsp) */
 	je_0};
     if (abs(next) > 128) {
-        printf("ERROR: je overflow %d > 128\n", next);
+        CODE maybranch_checkw[] = {
+            cmp_rax_rrsp,
+            jew_0};
+        PUSHc(maybranch_checkw);
+        PUSHrel(next);
     } else {
         PUSHc(maybranch_check);
         PUSHbyte(next);
