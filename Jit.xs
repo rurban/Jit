@@ -366,6 +366,11 @@ T_CHARARR NOP[]      = {0x90};    /* nop */
 #define mov_rebp_ebx(byte) 0x8b,0x5d,byte  /* mov 0x8(%ebp),%ebx*/
 #define test_eax_eax    0x85,0xc0
 
+/* XXX on i386 also? */
+#define jew_0        	0x0f,0x84
+#define jew(word)       0x0f,0x84,revword4(word)
+
+
 /* EPILOG */
 #define add_x_esp(byte) 0x83,0xc4,byte	/* add    $0x4,%esp */
 #define pop_ecx    	0x59
@@ -1287,9 +1292,9 @@ Perl_runops_jit(pTHX)
     free(code);
 #endif
     if (otherops)
-        sv_free(otherops);
+        sv_free((SV*)otherops);
     if (otherops1)
-        sv_free(otherops1);
+        sv_free((SV*)otherops1);
 
 #ifdef PROFILING
     if (profiling) {
