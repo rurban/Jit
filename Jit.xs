@@ -68,7 +68,8 @@ int global_loops = 0;
 int dispatch_needed(OP* op);
 int maybranch(OP* op);
 CODE *push_prolog(CODE *code);
-long jit_chain(pTHX_ OP* op, CODE *code, CODE *code_start
+long jit_chain(pTHX_ OP* op, CODE *code, CODE *code_start, 
+               int jumpsize, OP* stopop
 #ifdef DEBUGGING
               ,FILE *fh, FILE *stabs
 #endif
@@ -94,13 +95,17 @@ CODE *jmp_search_label(OP* op);
 #endif
 
 #ifdef DEBUGGING
-# define JIT_CHAIN(op, code, code_start) jit_chain(aTHX_ op, code, code_start, fh, stabs)
+# define JIT_CHAIN(op, code, code_start) jit_chain(aTHX_ op, code, code_start, 0, NULL, fh, stabs)
+# define JIT_CHAIN_FULL(op, code, code_start, size, stopop) \
+    jit_chain(aTHX_ op, code, code_start, size, stopop, fh, stabs)
 # define DEB_PRINT_LOC(loc) printf(loc" \t= 0x%x\n", loc)
 # if PERL_VERSION < 8
 #   define DEBUG_v(x) x
 # endif
 #else
-# define JIT_CHAIN(op, code, code_start) jit_chain(aTHX_ op, code, code_start) 
+# define JIT_CHAIN(op, code, code_start) jit_chain(aTHX_ op, code, code_start, 0, NULL) 
+# define JIT_CHAIN_FULL(op, code, code_start, size, stopop) \
+    jit_chain(aTHX_ op, code, code_start, size, stopop) 
 # define DEB_PRINT_LOC(loc)
 # if PERL_VERSION < 8
 #   define DEBUG_v(x)
@@ -389,6 +394,7 @@ T_CHARARR NOP[]      = {0x90};    /* nop */
 #define call 		0xe8	    /* + 4 rel */
 #define ljmp(abs) 	0xff,0x25   /* + 4 memabs */
 #define mov_eax_mem 	0xa3	    /* + 4 memabs */
+#define jmpb_0   	0xeb        /* maybranch */
 #define jmpb(byte)   	0xeb,(byte) /* maybranch */
 
 #ifdef USE_ITHREADS
@@ -425,7 +431,7 @@ push_maybranch_check(CODE *code, int next) {
             cmp_ecx_eax,
             jew_0};
         PUSHc(maybranch_checkw);
-        PUSHrel(next);
+        PUSHrel((CODE*)next);
     } else {
         PUSHc(maybranch_check);
         PUSHbyte(next);
@@ -434,13 +440,14 @@ push_maybranch_check(CODE *code, int next) {
 }
 
 T_CHARARR gotorel[] = {
-	jmpb(0)
+    jmpb(0)
 };
 CODE *
 push_gotorel(CODE *code, int label) {
     CODE gotorel[] = {
-	jmpb(label)};
+	jmpb_0};
     PUSHc(gotorel);
+    PUSHbyte(label);
     return code;
 }
 
@@ -454,6 +461,32 @@ T_CHARARR ifop0return[] = {
     test_eax_eax,
     je(sizeof(EPILOG)),
 };
+T_CHARARR ifop0goto[] = {
+    test_eax_eax,
+    je(0)
+};
+CODE *
+push_ifop0goto(CODE *code, int next) {
+    CODE ifop0goto[] = {
+        test_eax_eax,
+	je_0};
+    if (abs(next) > 128) {
+        CODE ifop0gotow[] = {
+            test_eax_eax,
+            jew_0};
+        PUSHc(ifop0gotow);
+        PUSHrel((CODE*)next);
+    } else {
+        PUSHc(ifop0goto);
+        PUSHbyte(next);
+    }
+    return code;
+}
+
+T_CHARARR call_eax[] = {
+    0xff,0xd0 /* call   *%eax */
+};
+
 #endif
 
 #if defined(__ia64__) || defined(__ia64) || defined(_M_IA64)
@@ -563,13 +596,15 @@ maybranch(OP* op) {
     case OP_REDO:		/* LOOPOP cx->redoop but if enter, enter->next */
     case OP_RETURN:		/* cx->blk_sub|eval|format.retop */
     case OP_DBSTATE:
-    case OP_CONTINUE:		/* cx->blk_givwhen.leaveop */
     case OP_REQUIRE: 		/* ? */
     case OP_ENTEREVAL:		/* cx->blk_eval.retop */
     case OP_ENTERTRY:		/* cx->blk_eval.retop */
     case OP_GOTO:		/* cx->blk_sub.retop or CvSTART(cv)|autoload or findlabel */
     case OP_LEAVEEVAL: 		/* ? */
+#if PERL_VERSION > 8
+    case OP_CONTINUE:		/* cx->blk_givwhen.leaveop */
     case OP_BREAK: 		/* ? */
+#endif
         return 1;
     default:
         return 0;
@@ -628,7 +663,9 @@ long
 jit_chain(pTHX_
 	  OP *op,
 	  CODE *code,
-	  CODE *code_start
+	  CODE *code_start,
+          int jumpsize,
+	  OP *stopop
 #ifdef DEBUGGING
 	  ,FILE *fh, FILE *stabs
 #endif
@@ -636,6 +673,8 @@ jit_chain(pTHX_
 {
     int dryrun = !code;
     int size = 0;
+    OP *startop = op;
+    OP *opnext;
 #ifdef DEBUGGING
     static int line = 3;
     char *opname;
@@ -648,6 +687,7 @@ jit_chain(pTHX_
 #endif
 
     do {
+        opnext = op->op_next;
 #ifdef DEBUGGING
 	if (!dryrun) {
 	    opname = (char*)PL_op_name[op->op_type];
@@ -693,54 +733,91 @@ jit_chain(pTHX_
 
 	if (op->op_type == OP_NULL) continue;
 
-        /* check labels -> store jmp targets. 
+        /* check labels -> store possible jmp targets. 
            Note: nextstate can also be normal jmp target as enter */
-	if (!dryrun && ((op->op_type == OP_NEXTSTATE)|(op->op_type == OP_DBSTATE))) {
-            char *label;
-            JMPTGT cx;
+	if (!dryrun) {
+            if ((op->op_type == OP_NEXTSTATE)|(op->op_type == OP_DBSTATE)) {
+                char *label;
+                JMPTGT cx;
 #ifdef CopLABEL
-            if (label = CopLABEL((COP*)op))
+                if (label = CopLABEL((COP*)op))
 #else
-            if (label = ((COP*)op)->cop_label)
+                if (label = ((COP*)op)->cop_label)
 #endif
-            {
-                cx.op = op;
-                cx.label = label;
-                cx.target = code;
-                DEBUG_v( printf("#  push jmp label %s at 0x%x for nextstate 0x%x\n", label, code, op));
-                PUSH_JMP(cx);
-            } else {
-                cx.op = op;
-                cx.label = NULL;
-                cx.target = code;
-                DEBUG_v( printf("#  push jmp at 0x%x for nextstate op=0x%x\n", code-code_start, op));
-                PUSH_JMP(cx);
+                {
+                    cx.op = op;
+                    cx.label = label;
+                    cx.target = code;
+                    DEBUG_v( printf("#  push jmp label %s at 0x%x for nextstate 0x%x\n", label, code, op));
+                    PUSH_JMP(cx);
+                } else {
+                    cx.op = op;
+                    cx.label = NULL;
+                    cx.target = code;
+                    DEBUG_v( printf("#  push jmp at 0x%x for nextstate op=0x%x\n", code-code_start, op));
+                    PUSH_JMP(cx);
+                }
+                if (op->op_type == OP_ENTER) {
+                    JMPTGT cx;
+                    cx.op = op;
+                    cx.label = NULL;
+                    cx.target = code;
+                    DEBUG_v( printf("#  push jmp at 0x%x for enter op=0x%x\n", code-code_start, op));
+                    PUSH_JMP(cx);
+                }
             }
         }
-        if (!dryrun && (op->op_type == OP_ENTER)) {
-            JMPTGT cx;
-            cx.op = op;
-            cx.label = NULL;
-            cx.target = code;
-            DEBUG_v( printf("#  push jmp at 0x%x for enter op=0x%x\n", code-code_start, op));
-            PUSH_JMP(cx);
+
+        /* XXX TODO
+         * We have almost no chance to get the CvSTART of the sub here, better in the parser.
+         * But we can try checking a CvSTART:
+         * - On XS function the CvSTART is added dynamically at run-time, but 
+         *   it makes no sense to jit already compiled XS code.
+         * - autoloaded non-xs code would be good to jit, but we'd need a run-time 
+         *   check for the CvSTART, and Jit it at run-time.
+         * For now we can only call unjitted functions.
+         * We'd have to call entersub, but then we'd need the prev. 
+         * context (name in the prev gv),
+         *  ... and we cannot call the chain at compile-time.
+         */
+	if (0 && (op->op_type == OP_ENTERSUB)) {
+            SV *sv; /* arg from the previous GV */
+            CV* cv;
+            /* first jit the sub, then loop through it.
+               loop CvROOT until !PL_op */
+            /*OP* next = Perl_pp_entersub(aTHX); / * find CvSTART */
+            UNOP* next = ((UNOP*)op)->op_first;
+            if (next) {
+                next = next->op_next;
+                if (dryrun) {
+                    size += JIT_CHAIN_FULL((OP*)next, NULL, NULL, 0, opnext);
+                } else {
+                    int lsize;
+                    DEBUG_v( printf("#  entersub() => op=0x%x\n", next));
+                    dbg_lines1("sub_%d: {", global_label);
+                    lsize = JIT_CHAIN_FULL((OP*)next, NULL, NULL, 0, opnext);
+                    code  = JIT_CHAIN_FULL((OP*)next, code, code_start, lsize, opnext);
+                    dbg_lines("}");
+                    dbg_lines1("next_%d:", global_label);
+                }
+            }
         }
 	
         if (maybranch(op)) {
 	    if (dryrun) {
 		size += sizeof(maybranch_plop);
 	    } else {
-                /* store op->next at 0(%esp). cmp returned op = op->next => jmp */
+                /* store op->next at 0(%esp). Later cmp returned op == op->next => jmp */
                 DEBUG_v( printf("# maybranch %s:\n", opname, op->op_ppaddr));
                 dbg_lines("op = PL_op->op_next;");
-		code = push_maybranch_plop(code, op->op_next);
+		code = push_maybranch_plop(code, opnext);
 	    }
         }
 	if (dryrun) {
 	    size += sizeof(CALL) + CALL_SIZE;
 	} else {
 #ifdef USE_ITHREADS
-	    dbg_cline1("/*my_perl->I*/PL_op = Perl_pp_%s(my_perl);\n", opname);
+	    dbg_cline1("my_perl->Iop = Perl_pp_%s(my_perl);\n", opname);
 #else
             dbg_cline1("PL_op = Perl_pp_%s();\n", opname);
 #endif
@@ -801,7 +878,7 @@ jit_chain(pTHX_
             }
 	    if (dryrun) {
                 if (hv_exists_ent(otherops1, keysv, 0)) {
-                    goto OUT;
+                    goto NEXT;
                 } else {
                     hv_store_ent(otherops1, keysv, newSViv((int)code), 0);
                 }
@@ -810,11 +887,11 @@ jit_chain(pTHX_
                     DEBUG_v( printf("# %s 0x%x already jitted, code=0x%x\n", PL_op_name[op->op_type],
                                     op, code));
                     /* XXX when is a jmp to this op needed? patch later or use the code addr from the hash */
-                    goto OUT;
+                    goto NEXT;
                 } else {
                     hv_store_ent(otherops, keysv, newSViv((int)code), 0);
                 }
-		dbg_lines1("if (PL_op == op->op_next) goto next_%d;", global_label);
+		/* dbg_lines1("if (PL_op == op) goto next_%d;", global_label); */
 	    }
 	    if ((PL_opargs[op->op_type] & OA_CLASS_MASK) == OA_LOGOP) {
                 if (dryrun) {
@@ -918,7 +995,9 @@ jit_chain(pTHX_
                     }
 		    break;
 		case OP_SUBSTCONT: /* need to jit other and the PMREPLSTART */ 
-                    if (!dryrun) {
+                    if (dryrun) {
+                        size += JIT_CHAIN(cLOGOPx(op)->op_other, NULL, NULL);
+                    } else {
                         DEBUG_v( printf("# substcont other\n"));
                         next = JIT_CHAIN(cLOGOPx(op)->op_other, code, code_start);
                         size += next-(int)code;
@@ -928,7 +1007,9 @@ jit_chain(pTHX_
 #else
 # define PMREPLSTART(op) (op)->op_pmreplstart
 #endif
-                    if (!dryrun) {
+                    if (dryrun) {
+                        size += JIT_CHAIN(PMREPLSTART(cPMOPx(op)), NULL, NULL);
+                    } else {
                         DEBUG_v( printf("# pmreplstart\n"));
                         lsize = JIT_CHAIN(PMREPLSTART(cPMOPx(op)), code, code_start);
                         size += lsize-(int)code;
@@ -953,8 +1034,58 @@ jit_chain(pTHX_
                         code = push_gotorel(code, (int)tgtop); /* jmp or rel? */
                     }
                     break;
+		case OP_ENTERSUB:
+                    if (dryrun) {
+                        size += sizeof(ifop0return);
+                        size += sizeof(EPILOG);
+                        size += sizeof(maybranch_check);
+                        size += sizeof(call_eax);
+                    } else {
+                        DEBUG_v( printf("# entersub: called unjitted sub\n") );
+                        /* retval maybe DIE, check PL_op==0 */
+                        dbg_lines("if (!PL_op)");
+                        code = PUSHc(ifop0return);
+                        dbg_lines("  return;");
+                        code = PUSHc(EPILOG);
+                        /* else */
+                        dbg_lines1("if (PL_op == op) goto next_%d;", global_label);
+                        /* XXX TODO check if we have jitted the returned %eax CvSTART */
+                        /* (search for existing CvSTART jmptargets) */
+                        /* else call unjitted retval */
+                        code = push_maybranch_check(code, sizeof(call_eax)); /* if cmp: je => next */
+                        dbg_lines("else (PL_op->op_ppaddr)();"); /* not found, continue unjitted */
+                        PUSHc(call_eax);
+                        dbg_lines1("next_%d:", global_label); 
+                    }
+                    break;
+
+#if 0
+                    /* XXX If we know the CvSTART, then we could jit the sub, then loop through it.
+                       loop CvROOT until !PL_op or op->next */
+                    {
+                        OP* next = Perl_pp_entersub(aTHX); /* find CvSTART */
+                        if (next) {
+                            next = next->op_next;
+                            if (dryrun) {
+                                size += JIT_CHAIN_FULL(next, NULL, NULL, 0, opnext);
+                            } else {
+                                dbg_lines1("sub_%d: {", global_label);
+                                lsize = JIT_CHAIN_FULL(next, NULL, NULL, 0, opnext);
+                                code  = JIT_CHAIN_FULL(next, code, code_start, lsize, opnext);
+                                dbg_lines("}");
+                                dbg_lines1("next_%d:", global_label);
+                            }
+                        }
+                    }
+#endif
+                    break;
+
 		default:
-		    warn("NYI unsupported maybranch op %s", PL_op_name[op->op_type]);
+                    if (!dryrun) {
+                        DEBUG_v( printf("NYI unsupported maybranch op %s\n", PL_op_name[op->op_type]) );
+                    }
+                    break;
+
                 /* goto and other search at run-time 
                    for possible jump targets in jmptargets info.
                    If no cx record is found, continue with the unjitted OP.
@@ -982,12 +1113,8 @@ jit_chain(pTHX_
                         OP *retop = NULL;
                         int i = 0;
 
-                        DEBUG_v( printf("# if (!op) return 0\n") );
-                        dbg_lines("if (!op) return 0;");
-                        PUSHc(ifop0return);
-                        PUSHc(EPILOG);
 
-                        dbg_lines1("if (op == op->op_next) goto next_%d;", global_label);
+                        dbg_lines1("if (PL_op == op) goto next_%d;", global_label);
 #ifdef USE_ITHREADS
                         i += sizeof(push_arg2);
 #else
@@ -997,6 +1124,8 @@ jit_chain(pTHX_
                         i += sizeof(maybranch_check);
                         i += sizeof(GOTOREL);
 
+                        code = PUSHc(ifop0return);
+                        code = PUSHc(EPILOG);
                         code = push_maybranch_check(code, i); /* if cmp: je => next */
 
                         /* The retop with the found label is only retrieved dynamic, within jit.
@@ -1029,10 +1158,30 @@ jit_chain(pTHX_
             global_label++;
 #endif
 	}
-    OUT:
-        ;
-    } while (op = op->op_next);
-    return dryrun ? size : (int)code;
+    NEXT:
+        if (stopop) { /* entersub  loop until some op_next? */
+            if (dryrun) {
+                size += sizeof(maybranch_check);
+                size += sizeof(GOTOREL);
+            } else {
+                DEBUG_v( printf("#  check !PL_op or PL_op 0x%x != op->next 0x%x (entersub)\n",
+                                opnext, stopop));
+                int i = sizeof(maybranch_check);
+                i += sizeof(GOTOREL);
+                code = push_maybranch_check(code, i);
+                code = push_gotorel(code, jumpsize);
+                dbg_lines1("if (PL_op == op) goto next_%d;", global_label);
+            }
+            if (stopop == opnext) goto OUT;
+        }
+    } while (op = opnext);
+ OUT:
+    if (dryrun) { 
+        op = startop;
+        return size;
+    } else {
+        return (int)code;
+    }
 }
 
 /*
@@ -1096,7 +1245,7 @@ Perl_runops_jit(pTHX)
     fprintf(fh,
             "struct op { OP* op_next; OP* op_other } OP;"
 #ifdef USE_ITHREADS
-	    "struct PerlInterpreter { OP* IOp; };"
+	    "struct PerlInterpreter { OP* IOp; int Isig_pending; };"
 #endif
 #if (PERL_VERSION > 6) && (PERL_VERSION < 13)
 	    "void *PL_sig_pending;"

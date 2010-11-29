@@ -5,6 +5,8 @@ v0.04_09 2010-11-27 rurban
 prevent also dryrun from recursive cycles, but with a different HV
 re-work and document MAYBRANCH ops, sync with new Opcodes-0.10
   use simple GOTO as default (searches at run-time in targets)
+first ENTERSUB attempt, but CvSTART detection would be much easier 
+  from the parser
 
 v0.04_08 2010-11-22 rurban
 

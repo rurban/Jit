@@ -5,6 +5,7 @@ my $X = $^X =~ m/\s/ ? qq{"$^X"} : $^X;
 my $blib = "-I".File::Spec->catfile("blib","arch")." -I".File::Spec->catfile("blib","lib");
 my $c = qq($X $blib -MJit);
 my $DEBUGGING = $Config{ccflags} =~ /-DDEBUGGING/;
+$c .= " -Dv" if $DEBUGGING and $] > 5.008;
 my $thr = $Config{useithreads};
 #$c .= " -Dv" if $DEBUGGING;
 
@@ -16,5 +17,4 @@ if ($r =~ /ok 1/m) {
 } else {
   print "not ok 1";
 }
-print " #TODO Perl_pp_leave scopestack block assertion. First enter missing.\n"
-  if $DEBUGGING;
+print " #TODO entersub\n";
