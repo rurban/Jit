@@ -96,16 +96,20 @@ CODE *jmp_search_label(OP* op);
 
 #ifdef DEBUGGING
 # define JIT_CHAIN(op, code, code_start) jit_chain(aTHX_ op, code, code_start, 0, NULL, fh, stabs)
+# define JIT_CHAIN_DRYRUN(op) jit_chain(aTHX_ op, NULL, NULL, 0, NULL, fh, stabs)
 # define JIT_CHAIN_FULL(op, code, code_start, size, stopop) \
     jit_chain(aTHX_ op, code, code_start, size, stopop, fh, stabs)
+# define JIT_CHAIN_DRYRUN_FULL(op,stopop) jit_chain(aTHX_ op, NULL, NULL, 0, stopop, fh, stabs)
 # define DEB_PRINT_LOC(loc) printf(loc" \t= 0x%x\n", loc)
 # if PERL_VERSION < 8
 #   define DEBUG_v(x) x
 # endif
 #else
 # define JIT_CHAIN(op, code, code_start) jit_chain(aTHX_ op, code, code_start, 0, NULL) 
+# define JIT_CHAIN_DRYRUN(op) jit_chain(aTHX_ op, NULL, NULL, 0, NULL)
 # define JIT_CHAIN_FULL(op, code, code_start, size, stopop) \
     jit_chain(aTHX_ op, code, code_start, size, stopop) 
+# define JIT_CHAIN_FULL_DRYRUN(op, stopop) jit_chain(aTHX_ op, NULL, NULL, 0, stopop)
 # define DEB_PRINT_LOC(loc)
 # if PERL_VERSION < 8
 #   define DEBUG_v(x)
@@ -790,12 +794,12 @@ jit_chain(pTHX_
             if (next) {
                 next = next->op_next;
                 if (dryrun) {
-                    size += JIT_CHAIN_FULL((OP*)next, NULL, NULL, 0, opnext);
+                    size += JIT_CHAIN_FULL_DRYRUN((OP*)next, opnext);
                 } else {
                     int lsize;
                     DEBUG_v( printf("#  entersub() => op=0x%x\n", next));
                     dbg_lines1("sub_%d: {", global_label);
-                    lsize = JIT_CHAIN_FULL((OP*)next, NULL, NULL, 0, opnext);
+                    lsize = JIT_CHAIN_FULL_DRYRUN((OP*)next, opnext);
                     code  = JIT_CHAIN_FULL((OP*)next, code, code_start, lsize, opnext);
                     dbg_lines("}");
                     dbg_lines1("next_%d:", global_label);
@@ -896,7 +900,7 @@ jit_chain(pTHX_
 	    if ((PL_opargs[op->op_type] & OA_CLASS_MASK) == OA_LOGOP) {
                 if (dryrun) {
                     size += sizeof(maybranch_check);
-                    size += JIT_CHAIN(cLOGOPx(op)->op_other, NULL, NULL);
+                    size += JIT_CHAIN_DRYRUN(cLOGOPx(op)->op_other);
                     size += sizeof(GOTOREL);
                 } else {
                     int next, other;
@@ -905,13 +909,13 @@ jit_chain(pTHX_
                     DEBUG_v( printf("# other_%d: %s => %s, ", global_label,
                                     PL_op_name[op->op_type],
                                     PL_op_name[cLOGOPx(op)->op_other->op_type]));
-                    other = JIT_CHAIN(logop->op_other, NULL, NULL); /* sizeof other */
+                    other = JIT_CHAIN_DRYRUN(logop->op_other); /* sizeof other */
                     other += sizeof(GOTOREL);
                     code = push_maybranch_check(code, other); /* if cmp: je => next */
                     DEBUG_v( printf("size=%x\n", other) );
                     code = (CODE*)JIT_CHAIN(logop->op_other, code, code_start);
                     dbg_lines1("goto next_%d;", global_label);
-                    next = JIT_CHAIN(logop->op_next, NULL, NULL);  /* sizeof next */
+                    next = JIT_CHAIN_DRYRUN(logop->op_next);  /* sizeof next */
                     DEBUG_v( printf("# next_%d: %s, size=%x\n", global_label, 
                                     PL_op_name[logop->op_next->op_type], next));
                     code = push_gotorel(code, next);
@@ -931,12 +935,12 @@ jit_chain(pTHX_
                         LOGOP* logop;
                         logop = cLOGOPx(cUNOPx(op)->op_first);
                         if (dryrun) {
-                            size += JIT_CHAIN(logop->op_other, NULL, NULL);
+                            size += JIT_CHAIN_DRYRUN(logop->op_other);
                             size += sizeof(maybranch_check);
                             size += sizeof(GOTOREL);
                         } else {
                             int other;
-                            other = JIT_CHAIN(logop->op_other, NULL, NULL); /* sizeof other */
+                            other = JIT_CHAIN_DRYRUN(logop->op_other); /* sizeof other */
                             other += sizeof(GOTOREL);
                             code = push_maybranch_check(code, other); /* if cmp: je => next */
                             DEBUG_v( printf("# other_%d: %s, size=%x\n", global_label,
@@ -960,9 +964,9 @@ jit_chain(pTHX_
                          */
                         DEBUG_v( printf("# %s_%d:\n", PL_op_name[loop->op_type], global_label));
                         /* After each chain jump to the end, so we need all sizes. */
-                        nextop = JIT_CHAIN(loop->op_nextop, NULL, NULL); /* sizeof other */
-                        lastop = JIT_CHAIN(loop->op_lastop, NULL, NULL);
-                        redoop = JIT_CHAIN(loop->op_redoop, NULL, NULL);
+                        nextop = JIT_CHAIN_DRYRUN(loop->op_nextop); /* sizeof other */
+                        lastop = JIT_CHAIN_DRYRUN(loop->op_lastop);
+                        redoop = JIT_CHAIN_DRYRUN(loop->op_redoop);
                         lsize = nextop + lastop + redoop + 3*(sizeof(CALL)+CALL_SIZE);
                         dbg_lines1("goto branch_%d;", global_label);
                         code = push_gotorel(code, lsize); /* jump to end: nextop+lastop+redoop+3*goto */
@@ -996,7 +1000,7 @@ jit_chain(pTHX_
 		    break;
 		case OP_SUBSTCONT: /* need to jit other and the PMREPLSTART */ 
                     if (dryrun) {
-                        size += JIT_CHAIN(cLOGOPx(op)->op_other, NULL, NULL);
+                        size += JIT_CHAIN_DRYRUN(cLOGOPx(op)->op_other);
                     } else {
                         DEBUG_v( printf("# substcont other\n"));
                         next = JIT_CHAIN(cLOGOPx(op)->op_other, code, code_start);
@@ -1008,7 +1012,7 @@ jit_chain(pTHX_
 # define PMREPLSTART(op) (op)->op_pmreplstart
 #endif
                     if (dryrun) {
-                        size += JIT_CHAIN(PMREPLSTART(cPMOPx(op)), NULL, NULL);
+                        size += JIT_CHAIN_DRYRUN(PMREPLSTART(cPMOPx(op)));
                     } else {
                         DEBUG_v( printf("# pmreplstart\n"));
                         lsize = JIT_CHAIN(PMREPLSTART(cPMOPx(op)), code, code_start);
@@ -1067,10 +1071,10 @@ jit_chain(pTHX_
                         if (next) {
                             next = next->op_next;
                             if (dryrun) {
-                                size += JIT_CHAIN_FULL(next, NULL, NULL, 0, opnext);
+                                size += JIT_CHAIN_FULL_DRYRUN(next, opnext);
                             } else {
                                 dbg_lines1("sub_%d: {", global_label);
-                                lsize = JIT_CHAIN_FULL(next, NULL, NULL, 0, opnext);
+                                lsize = JIT_CHAIN_FULL_DRYRUN(next, opnext);
                                 code  = JIT_CHAIN_FULL(next, code, code_start, lsize, opnext);
                                 dbg_lines("}");
                                 dbg_lines1("next_%d:", global_label);
