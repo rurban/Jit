@@ -95,21 +95,21 @@ CODE *jmp_search_label(OP* op);
 #endif
 
 #ifdef DEBUGGING
-# define JIT_CHAIN(op, code, code_start) jit_chain(aTHX_ op, code, code_start, 0, NULL, fh, stabs)
-# define JIT_CHAIN_DRYRUN(op) jit_chain(aTHX_ op, NULL, NULL, 0, NULL, fh, stabs)
-# define JIT_CHAIN_FULL(op, code, code_start, size, stopop) \
-    jit_chain(aTHX_ op, code, code_start, size, stopop, fh, stabs)
+# define JIT_CHAIN_DRYRUN(op) 		  jit_chain(aTHX_ op, NULL, NULL, 0, NULL, fh, stabs)
 # define JIT_CHAIN_DRYRUN_FULL(op,stopop) jit_chain(aTHX_ op, NULL, NULL, 0, stopop, fh, stabs)
+# define JIT_CHAIN(op) 		   (CODE*)jit_chain(aTHX_ op, code, code_start, 0, NULL, fh, stabs)
+# define JIT_CHAIN_FULL(op, size, stopop) \
+    (CODE*)jit_chain(aTHX_ op, code, code_start, size, stopop, fh, stabs)
 # define DEB_PRINT_LOC(loc) printf(loc" \t= 0x%x\n", loc)
 # if PERL_VERSION < 8
 #   define DEBUG_v(x) x
 # endif
 #else
-# define JIT_CHAIN(op, code, code_start) jit_chain(aTHX_ op, code, code_start, 0, NULL) 
-# define JIT_CHAIN_DRYRUN(op) jit_chain(aTHX_ op, NULL, NULL, 0, NULL)
-# define JIT_CHAIN_FULL(op, code, code_start, size, stopop) \
-    jit_chain(aTHX_ op, code, code_start, size, stopop) 
+# define JIT_CHAIN_DRYRUN(op) 		   jit_chain(aTHX_ op, NULL, NULL, 0, NULL)
 # define JIT_CHAIN_FULL_DRYRUN(op, stopop) jit_chain(aTHX_ op, NULL, NULL, 0, stopop)
+# define JIT_CHAIN(op) 		    (CODE*)jit_chain(aTHX_ op, code, code_start, 0, NULL) 
+# define JIT_CHAIN_FULL(op, size, stopop) \
+    (CODE*)jit_chain(aTHX_ op, code, code_start, size, stopop)
 # define DEB_PRINT_LOC(loc)
 # if PERL_VERSION < 8
 #   define DEBUG_v(x)
@@ -800,7 +800,7 @@ jit_chain(pTHX_
                     DEBUG_v( printf("#  entersub() => op=0x%x\n", next));
                     dbg_lines1("sub_%d: {", global_label);
                     lsize = JIT_CHAIN_FULL_DRYRUN((OP*)next, opnext);
-                    code  = JIT_CHAIN_FULL((OP*)next, code, code_start, lsize, opnext);
+                    code  = JIT_CHAIN_FULL((OP*)next, lsize, opnext);
                     dbg_lines("}");
                     dbg_lines1("next_%d:", global_label);
                 }
@@ -913,7 +913,7 @@ jit_chain(pTHX_
                     other += sizeof(GOTOREL);
                     code = push_maybranch_check(code, other); /* if cmp: je => next */
                     DEBUG_v( printf("size=%x\n", other) );
-                    code = (CODE*)JIT_CHAIN(logop->op_other, code, code_start);
+                    code = JIT_CHAIN(logop->op_other);
                     dbg_lines1("goto next_%d;", global_label);
                     next = JIT_CHAIN_DRYRUN(logop->op_next);  /* sizeof next */
                     DEBUG_v( printf("# next_%d: %s, size=%x\n", global_label, 
@@ -945,7 +945,7 @@ jit_chain(pTHX_
                             code = push_maybranch_check(code, other); /* if cmp: je => next */
                             DEBUG_v( printf("# other_%d: %s, size=%x\n", global_label,
                                             PL_op_name[logop->op_other->op_type], other));
-                            code = (CODE*)JIT_CHAIN(logop->op_other, code, code_start);
+                            code = JIT_CHAIN(logop->op_other);
                         }
 		    }
 		    break;
@@ -975,7 +975,7 @@ jit_chain(pTHX_
                                         PL_op_name[loop->op_nextop->op_type], lsize));
                         dbg_lines1("nextop_%d:", global_label);
                         cx.nextop = code;
-                        code = JIT_CHAIN(loop->op_nextop, code, code_start);
+                        code = JIT_CHAIN(loop->op_nextop);
 
                         lsize -= nextop + sizeof(CALL)+CALL_SIZE;
                         dbg_lines1("goto branch_%d;", global_label);
@@ -984,7 +984,7 @@ jit_chain(pTHX_
                                         PL_op_name[loop->op_lastop->op_type], lsize));
                         cx.lastop = code;
                         dbg_lines1("lastop_%d:", global_label);
-                        code = JIT_CHAIN(loop->op_lastop, (char*)lsize, code_start);
+                        code = JIT_CHAIN(loop->op_lastop);
 
                         lsize -= lastop + sizeof(CALL)+CALL_SIZE;
                         dbg_lines1("goto branch_%d;", global_label);
@@ -993,18 +993,18 @@ jit_chain(pTHX_
                                         PL_op_name[loop->op_redoop->op_type], lsize));
                         cx.redoop = code;
                         dbg_lines1("redoop_%d:", global_label);
-                        code = JIT_CHAIN(loop->op_redoop, (char*)lsize, code_start);
+                        code = JIT_CHAIN(loop->op_redoop);
                         PUSH_LOOP(cx);
                         dbg_lines1("branch_%d:", global_label);
                     }
 		    break;
-		case OP_SUBSTCONT: /* need to jit other and the PMREPLSTART */ 
+		case OP_SUBSTCONT: /* need to jit other and the PMREPLSTART. What logic? */ 
                     if (dryrun) {
                         size += JIT_CHAIN_DRYRUN(cLOGOPx(op)->op_other);
                     } else {
                         DEBUG_v( printf("# substcont other\n"));
-                        next = JIT_CHAIN(cLOGOPx(op)->op_other, code, code_start);
-                        size += next-(int)code;
+                        code = JIT_CHAIN(cLOGOPx(op)->op_other);
+                        /*size += next-(int)code;*/
                     }
 #if PERL_VERSION > 8
 # define PMREPLSTART(op) (op)->op_pmstashstartu.op_pmreplstart
@@ -1015,8 +1015,8 @@ jit_chain(pTHX_
                         size += JIT_CHAIN_DRYRUN(PMREPLSTART(cPMOPx(op)));
                     } else {
                         DEBUG_v( printf("# pmreplstart\n"));
-                        lsize = JIT_CHAIN(PMREPLSTART(cPMOPx(op)), code, code_start);
-                        size += lsize-(int)code;
+                        code = JIT_CHAIN(PMREPLSTART(cPMOPx(op)));
+                        /*size += lsize-(int)code;*/
                     }
                     break;
 
@@ -1075,7 +1075,7 @@ jit_chain(pTHX_
                             } else {
                                 dbg_lines1("sub_%d: {", global_label);
                                 lsize = JIT_CHAIN_FULL_DRYRUN(next, opnext);
-                                code  = JIT_CHAIN_FULL(next, code, code_start, lsize, opnext);
+                                code  = JIT_CHAIN_FULL(next, lsize, opnext);
                                 dbg_lines("}");
                                 dbg_lines1("next_%d:", global_label);
                             }
@@ -1267,7 +1267,7 @@ Perl_runops_jit(pTHX)
 #endif
     size = 0;
     size += sizeof(PROLOG);
-    size += JIT_CHAIN(PL_op, NULL, NULL);
+    size += JIT_CHAIN_DRYRUN(PL_op);
     size += sizeof(EPILOG);
     while ((size | 0xfffffff0) % 4) { size++; }
 #ifdef _WIN32
@@ -1344,7 +1344,7 @@ Perl_runops_jit(pTHX)
     /* pass 2: jit */
     code = push_prolog(code);
     PL_op = root;
-    code = (CODE*)JIT_CHAIN(PL_op, code, code_start);
+    code = (CODE*)JIT_CHAIN(PL_op);
     PUSHc(EPILOG);
     while (((unsigned int)&code | 0xfffffff0) % 4) { *(code++) = NOP[0]; }
     /* XXX patchup missed jmptargets */
