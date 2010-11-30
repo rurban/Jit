@@ -171,7 +171,11 @@ threaded, same logic as above, just:
 /* threads: offsets are perl version and ptrsize dependent */
 # define IOP_OFFSET 		PTRSIZE		/* my_perl->Iop_pending offset */
 # define SIG_PENDING_OFFSET 	4*PTRSIZE	/* my_perl->Isig_pending offset */
+# define PPADDR_OFFSET          (IOP_OFFSET+2*PTRSIZE)
+#else
+# define PPADDR_OFFSET          (2*PTRSIZE)
 #endif
+
 
 #define CALL_ABS(abs) 	code = call_abs(code,abs)
 /*(U32)((unsigned char*)abs-code-3)*/
@@ -494,6 +498,9 @@ push_ifop0goto(CODE *code, int next) {
     return code;
 }
 
+T_CHARARR add_eax_ppaddr[] = {
+    0x83,0xc0,PPADDR_OFFSET /* add $8,%eax */
+};
 T_CHARARR call_eax[] = {
     0xff,0xd0 /* call   *%eax */
 };
@@ -1049,7 +1056,9 @@ jit_chain(pTHX_
                         size += sizeof(ifop0return);
                         size += sizeof(EPILOG);
                         size += sizeof(maybranch_check);
+                        size += sizeof(add_eax_ppaddr);
                         size += sizeof(call_eax);
+                        size += sizeof(SAVE_PLOP);
                     } else {
                         DEBUG_v( printf("# entersub: called unjitted sub\n") );
                         /* retval maybe DIE, check PL_op==0 */
@@ -1091,7 +1100,9 @@ jit_chain(pTHX_
 #endif
 
                         dbg_lines("else (PL_op->op_ppaddr)();"); /* not found, continue unjitted */
+                        PUSHc(add_eax_ppaddr); /* ppaddr offset from %eax */
                         PUSHc(call_eax);
+                        PUSHc(SAVE_PLOP);
                         dbg_lines1("next_%d:", global_label); 
                     }
                     break;
