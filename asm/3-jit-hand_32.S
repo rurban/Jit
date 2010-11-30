@@ -1,4 +1,5 @@
-	.file	"3-jit-hand.S"
+# i386 unthreaded sample runloop
+        .file	"3-jit-hand_32.S"
 	.text
 	.p2align 4,,15
 .globl _runops_jit_0
@@ -7,11 +8,10 @@
 # PL_op in eax, &PL_op in ebx, &PL_sig_pending in -4(%ebp), local op in -8(%ebp)
 _runops_jit_0:
 prolog:
-	pushl	%ebp
-	movl	%esp, %ebp
+	enter   $8,$0
         pushl 	%ebx
 	pushl	%ecx
-	subl	$8, %esp
+        # movl    0x8(%ebp),%ebx ; threaded:      Iop is at 8 from my_perl
 	movl	$_PL_op, %ebx
 	movl	$_Perl_Isig_pending_ptr, -4(%ebp)
 loop:           
@@ -34,13 +34,26 @@ check_sig1:
 	je	L2
 	call	_Perl_despatch_signals
 L2:
+        mov    %eax, (%ebx)
+        call   _Perl_pp_gt
+        mov    %eax, (%ebx)
+        mov    $0x10329c0, %ecx 	#  op = PL_op->op_next
+        call   _Perl_pp_entersub
+        mov    %eax, (%ebx)
+        test   %eax, %eax        	#  if (!PL_op) return;
+        je     sub_1_next
+        pop    %ecx
+        pop    %ebx
+        leave
+        ret
+sub_1_next:      
+        cmp    %ecx, %eax		#  if (PL_op != op) call (PL_op->op_ppaddr)();
+        je     sub_1_end
+        add    $8, %eax			# +op_ppaddr offset
+        call   *%eax			# call sub dynamically (unjitted)
+        mov    %eax, (%ebx)		# save_plop
+sub_1_end:           
 	call	_Perl_pp_padsv
-	movl	%eax, (%ebx)
-	call	_Perl_pp_const
-	movl	%eax, (%ebx)
-	call	_Perl_pp_gt
-	movl	%eax, (%ebx)
-maybranch1:
 	movl	_PL_op, %eax
 	movl	%eax, -8(%ebp)
 	movl	_PL_op, %ecx
@@ -52,12 +65,12 @@ check_sig2:
 	testl	%eax, %eax
 	je	L3
 	call	_Perl_despatch_signals
+# compare returned PL_op against prev op->op_next in %ecx        
 L3:
 	movl	_PL_op, %eax
 	cmpl	%ecx, %eax
 #	cmp	%r12, %rax
 	je	next_1
-        
 # op_other block from if (if true)
 other_1:
 	call	_Perl_pp_pushmark
@@ -67,7 +80,6 @@ other_1:
 	call	_Perl_pp_print
 	movl	%eax, (%ebx)
 	jmp	leave_1
-        
 # op_next block from if (if false)
 next_1:
 	call	_Perl_pp_enter
