@@ -1,0 +1,116 @@
+
+help/3-jit-hand.o:     file format pe-i386
+
+
+Disassembly of section .text:
+
+00000000 <_runops_jit_0>:
+   0:	55                   	push   %ebp
+   1:	89 e5                	mov    %esp,%ebp
+   3:	53                   	push   %ebx
+   4:	51                   	push   %ecx
+   5:	83 ec 08             	sub    $0x8,%esp
+   8:	bb 00 00 00 00       	mov    $0x0,%ebx
+   d:	c7 45 fc 00 00 00 00 	movl   $0x0,-0x4(%ebp)
+
+00000014 <loop>:
+  14:	e8 00 00 00 00       	call   19 <loop+0x5>
+  19:	89 03                	mov    %eax,(%ebx)
+  1b:	e8 00 00 00 00       	call   20 <loop+0xc>
+  20:	89 03                	mov    %eax,(%ebx)
+  22:	e8 00 00 00 00       	call   27 <loop+0x13>
+  27:	89 03                	mov    %eax,(%ebx)
+  29:	e8 00 00 00 00       	call   2e <loop+0x1a>
+  2e:	89 03                	mov    %eax,(%ebx)
+  30:	e8 00 00 00 00       	call   35 <loop+0x21>
+  35:	89 03                	mov    %eax,(%ebx)
+  37:	e8 00 00 00 00       	call   3c <loop+0x28>
+  3c:	89 03                	mov    %eax,(%ebx)
+
+0000003e <check_sig1>:
+  3e:	8b 55 fc             	mov    -0x4(%ebp),%edx
+  41:	8b 02                	mov    (%edx),%eax
+  43:	85 c0                	test   %eax,%eax
+  45:	74 05                	je     4c <check_sig1+0xe>
+  47:	e8 00 00 00 00       	call   4c <check_sig1+0xe>
+  4c:	e8 00 00 00 00       	call   51 <check_sig1+0x13>
+  51:	89 03                	mov    %eax,(%ebx)
+  53:	e8 00 00 00 00       	call   58 <check_sig1+0x1a>
+  58:	89 03                	mov    %eax,(%ebx)
+  5a:	e8 00 00 00 00       	call   5f <check_sig1+0x21>
+  5f:	89 03                	mov    %eax,(%ebx)
+
+00000061 <maybranch1>:
+  61:	a1 00 00 00 00       	mov    0x0,%eax
+  66:	89 45 f8             	mov    %eax,-0x8(%ebp)
+  69:	8b 0d 00 00 00 00    	mov    0x0,%ecx
+  6f:	e8 00 00 00 00       	call   74 <maybranch1+0x13>
+  74:	89 03                	mov    %eax,(%ebx)
+
+00000076 <check_sig2>:
+  76:	8b 55 fc             	mov    -0x4(%ebp),%edx
+  79:	8b 02                	mov    (%edx),%eax
+  7b:	85 c0                	test   %eax,%eax
+  7d:	74 05                	je     84 <check_sig2+0xe>
+  7f:	e8 00 00 00 00       	call   84 <check_sig2+0xe>
+  84:	a1 00 00 00 00       	mov    0x0,%eax
+  89:	39 c8                	cmp    %ecx,%eax
+  8b:	74 17                	je     a4 <next_1>
+
+0000008d <other_1>:
+  8d:	e8 00 00 00 00       	call   92 <other_1+0x5>
+  92:	89 03                	mov    %eax,(%ebx)
+  94:	e8 00 00 00 00       	call   99 <other_1+0xc>
+  99:	89 03                	mov    %eax,(%ebx)
+  9b:	e8 00 00 00 00       	call   a0 <other_1+0x13>
+  a0:	89 03                	mov    %eax,(%ebx)
+  a2:	eb 23                	jmp    c7 <leave_1>
+
+000000a4 <next_1>:
+  a4:	e8 00 00 00 00       	call   a9 <next_1+0x5>
+  a9:	89 03                	mov    %eax,(%ebx)
+  ab:	e8 00 00 00 00       	call   b0 <next_1+0xc>
+  b0:	89 03                	mov    %eax,(%ebx)
+
+000000b2 <check_sig3>:
+  b2:	8b 55 fc             	mov    -0x4(%ebp),%edx
+  b5:	8b 02                	mov    (%edx),%eax
+  b7:	85 c0                	test   %eax,%eax
+  b9:	74 05                	je     c0 <check_sig3+0xe>
+  bb:	e8 00 00 00 00       	call   c0 <check_sig3+0xe>
+  c0:	e8 00 00 00 00       	call   c5 <check_sig3+0x13>
+  c5:	89 03                	mov    %eax,(%ebx)
+
+000000c7 <leave_1>:
+  c7:	e8 00 00 00 00       	call   cc <leave_1+0x5>
+  cc:	89 03                	mov    %eax,(%ebx)
+  ce:	59                   	pop    %ecx
+  cf:	5b                   	pop    %ebx
+  d0:	c9                   	leave  
+  d1:	c3                   	ret    
+
+000000d2 <_main>:
+  d2:	8d 4c 24 04          	lea    0x4(%esp),%ecx
+  d6:	83 e4 f0             	and    $0xfffffff0,%esp
+  d9:	ff 71 fc             	pushl  -0x4(%ecx)
+  dc:	55                   	push   %ebp
+  dd:	89 e5                	mov    %esp,%ebp
+  df:	51                   	push   %ecx
+  e0:	83 ec 04             	sub    $0x4,%esp
+  e3:	e8 00 00 00 00       	call   e8 <_main+0x16>
+  e8:	e8 13 ff ff ff       	call   0 <_runops_jit_0>
+  ed:	83 c4 04             	add    $0x4,%esp
+  f0:	59                   	pop    %ecx
+  f1:	5d                   	pop    %ebp
+  f2:	8d 61 fc             	lea    -0x4(%ecx),%esp
+  f5:	c3                   	ret    
+  f6:	90                   	nop
+  f7:	90                   	nop
+  f8:	90                   	nop
+  f9:	90                   	nop
+  fa:	90                   	nop
+  fb:	90                   	nop
+  fc:	90                   	nop
+  fd:	90                   	nop
+  fe:	90                   	nop
+  ff:	90                   	nop

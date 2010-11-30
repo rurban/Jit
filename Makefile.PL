@@ -83,8 +83,8 @@ if ($^O ne 'MSWin32') {
   }
 }
 my $clean_t = File::Spec->catfile("t", "_t*.pl")." ";
-$clean_t .= File::Spec->catfile("help", "*.dis")." ";
-$clean_t .= File::Spec->catfile("help", "*".$Config{obj_ext})." ";
+$clean_t .= File::Spec->catfile("asm", "*.dis")." ";
+$clean_t .= File::Spec->catfile("asm", "*".$Config{obj_ext})." ";
 
 WriteMakefile
  (
@@ -125,26 +125,26 @@ t : test
 sub MY::postamble {
   $bit = "_" . $Config{ptrsize} * 8;
   if ($Config{useithreads}) {
-    "asm : help/cc_main$bit.dis
+    "asm : asm/cc_main$bit.dis
 
-help/cc_main$bit.dis: help/cc_main$bit
-	objdump -d -S help/cc_main$bit > help/cc_main$bit.dis
+asm/cc_main$bit.dis: asm/cc_main$bit
+	objdump -d -S asm/cc_main$bit > asm/cc_main$bit.dis
 
-help/cc_main$bit: help/cc_main.c
-	\$(PERL) -S cc_harness help/cc_main.c -fno-stack-protector -g3 -o help/cc_main$bit -save-temps -fverbose-asm
+asm/cc_main$bit: asm/cc_main.c
+	\$(PERL) -S cc_harness asm/cc_main.c -fno-stack-protector -g3 -o asm/cc_main$bit -save-temps -fverbose-asm
 "
   } else {
-    "asm : help/cc_main_nt$bit.dis help/3-jit-hand.dis
+    "asm : asm/cc_main_nt$bit.dis asm/3-jit-hand.dis
 
-help/cc_main_nt$bit.dis: help/cc_main_nt$bit
-	objdump -d -S help/cc_main_nt$bit > help/cc_main_nt$bit.dis
+asm/cc_main_nt$bit.dis: asm/cc_main_nt$bit
+	objdump -d -S asm/cc_main_nt$bit > asm/cc_main_nt$bit.dis
 
-help/cc_main_nt$bit: help/cc_main_nt.c
-	\$(PERL) -S cc_harness help/cc_main_nt.c -fno-stack-protector -g3 -o help/cc_main_nt$bit -save-temps -fverbose-asm
+asm/cc_main_nt$bit: asm/cc_main_nt.c
+	\$(PERL) -S cc_harness asm/cc_main_nt.c -fno-stack-protector -g3 -o asm/cc_main_nt$bit -save-temps -fverbose-asm
 
-help/3-jit-hand.dis: help/3-jit-hand.S
-	as help/3-jit-hand.S -o help/3-jit-hand.o
-	objdump -d help/3-jit-hand.o > help/3-jit-hand.dis
+asm/3-jit-hand.dis: asm/3-jit-hand.S
+	as asm/3-jit-hand.S -o asm/3-jit-hand.o
+	objdump -d asm/3-jit-hand.o > asm/3-jit-hand.dis
 "
   }
 }
