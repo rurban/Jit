@@ -5,7 +5,7 @@
 .globl _runops_jit_0
 	.def	_runops_jit_0;	.scl	2;	.type	32;	.endef
 
-# PL_op in eax, &PL_op in ebx, &PL_sig_pending in -4(%ebp), local op in -8(%ebp)
+# PL_op in eax, &PL_op in ebx, &PL_sig_pending in -4(%ebp), local op in %esp
 _runops_jit_0:
 prolog:
 	enter   $8,$0
@@ -37,7 +37,7 @@ L2:
         mov    %eax, (%ebx)
         call   _Perl_pp_gt
         mov    %eax, (%ebx)
-        mov    $0x10329c0, %ecx 	#  op = PL_op->op_next
+        mov    $0x10329c0, %esp 	#  op = PL_op->op_next
         call   _Perl_pp_entersub
         mov    %eax, (%ebx)
         test   %eax, %eax        	#  if (!PL_op) return;
@@ -47,7 +47,7 @@ L2:
         leave
         ret
 sub_1_next:      
-        cmp    %ecx, %eax		#  if (PL_op != op) call (PL_op->op_ppaddr)();
+        cmp    %esp, %eax		#  if (PL_op != op) call (PL_op->op_ppaddr)();
         je     sub_1_end
         add    $8, %eax			# +op_ppaddr offset
         call   *%eax			# call sub dynamically (unjitted)

@@ -66,34 +66,34 @@ T_CHARARR amd64thr_nop2[]       = {0x90,0x90};      /* jmp pad */
 T_CHARARR amd64thr_dispatch_getsig[] = {
     mov_mem_rcx};
 T_CHARARR amd64thr_dispatch[] = {
-    test_ecx_ecx,
+    test_rcx_rcx,
     je(8)};
 
 #define mov_rrax_r12	0x4c,0x8b,0x20
 
 T_CHARARR maybranch_plop[] = {
-    mov_mem_r12, fourbyte
+    mov_mem_esp, fourbyte
 };
 unsigned char *
 push_maybranch_plop(unsigned char *code, OP* next) {
     T_CHARARR maybranch_plop1[] = {
-	mov_mem_r12};
+	mov_mem_esp};
     PUSHc(maybranch_plop1);
     PUSHabs(next);
     return code;
 }
 T_CHARARR maybranch_check[] = {
-    cmp_rax_r12,
+    cmp_rsp_rax,
     je(0)
 };
 unsigned char *
 push_maybranch_check(unsigned char *code, int next) {
     unsigned char maybranch_check[] = {
-	cmp_rax_rrsp,
+	cmp_rsp_rax,
 	je_0};
     if (abs(next) > 128) {
         CODE maybranch_checkw[] = {
-            cmp_rax_rrsp,
+            cmp_rsp_rax,
             jew_0};
         PUSHc(maybranch_checkw);
         PUSHrel(next);
