@@ -260,6 +260,8 @@ T_CHARARR NOP[]      = {0x90};    /* nop */
 #ifndef _WIN64
 #define push_arg1_mem   mov_mem_edi	/* if call via register */
 #define push_arg2_mem   mov_mem_esi
+#define push_arg1_eax   mov_eax_edi 	/* XXX */
+#define push_arg2_eax   mov_eax_esi	/* XXX */
 #else
 /* Win64 Visual C __fastcall uses rcx,rdx for the first int args, not rdi,rsi
    We use less than 2GB for our vars and subs.
@@ -267,6 +269,8 @@ T_CHARARR NOP[]      = {0x90};    /* nop */
 #define mov_mem_edx     0xba		/* arg2 */
 #define push_arg1_mem   mov_mem_ecx	/* if call via register */
 #define push_arg2_mem   mov_mem_edx
+#define push_arg1_eax   mov_eax_ecx	/* XXX */
+#define push_arg2_eax   mov_eax_edx	/* XXX */
 #endif
 
 #ifndef _WIN64
@@ -354,6 +358,9 @@ T_CHARARR NOP[]      = {0x90};    /* nop */
 
 #define push_imm_0	0x68
 #define push_imm(m)	0x68,revword(m)
+#define push_eax 	0x50
+#define push_arg1_eax   push_eax
+#define push_arg2_eax   push_eax
 #define push_arg1_mem   push_imm_0
 #define push_arg2_mem   push_imm_0
 
@@ -490,7 +497,6 @@ push_ifop0goto(CODE *code, int next) {
 T_CHARARR call_eax[] = {
     0xff,0xd0 /* call   *%eax */
 };
-
 #endif
 
 #if defined(__ia64__) || defined(__ia64) || defined(_M_IA64)
@@ -707,7 +713,7 @@ jit_chain(pTHX_
             }
         }
 # endif
-# if defined(DEBUG_s_TEST_)
+# if defined(DEBUG_t_TEST_)
         if (DEBUG_t_TEST_ && op) {
             T_CHARARR push_arg1[] = { push_arg1_mem };
 #  ifdef USE_ITHREADS
@@ -1057,6 +1063,33 @@ jit_chain(pTHX_
                         /* (search for existing CvSTART jmptargets) */
                         /* else call unjitted retval */
                         code = push_maybranch_check(code, sizeof(call_eax)); /* if cmp: je => next */
+
+#if defined(DEBUG_t_TEST_)
+                        if (DEBUG_t_TEST_ && op) {
+                            T_CHARARR push_arg1[] = { push_arg1_eax };
+# ifdef USE_ITHREADS
+                            T_CHARARR push_arg2[] = { push_arg2_eax };
+# endif
+                            if (dryrun) {
+# ifdef USE_ITHREADS
+                                size += sizeof(push_arg2);
+# else
+                                size += sizeof(push_arg1);
+# endif
+                                size += sizeof(CALL) + CALL_SIZE;
+                            } else {
+# ifdef USE_ITHREADS
+                                PUSHc(push_arg2);
+# else
+                                PUSHc(push_arg1);
+# endif
+                                CALL_ABS(&Perl_debop);
+                                DEBUG_v( printf("# debop(%x) %s\n", op, (char*)PL_op_name[op->op_type]));
+                                dbg_lines("debop(PL_op);");
+                            }
+                        }
+#endif
+
                         dbg_lines("else (PL_op->op_ppaddr)();"); /* not found, continue unjitted */
                         PUSHc(call_eax);
                         dbg_lines1("next_%d:", global_label); 
