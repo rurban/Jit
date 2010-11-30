@@ -124,8 +124,15 @@ t : test
 
 sub MY::postamble {
   $bit = "_" . $Config{ptrsize} * 8;
+  my $asm = "
+asm/3-jit-hand$bit.dis: asm/3-jit-hand$bit.S
+	as asm/3-jit-hand$bit.S -o asm/3-jit-hand$bit.o
+	objdump -d asm/3-jit-hand$bit.o > asm/3-jit-hand$bit.dis
+
+";
   if ($Config{useithreads}) {
-    "asm : asm/cc_main$bit.dis
+    $asm .
+    "asm : asm/cc_main$bit.dis asm/3-jit-hand$bit.dis
 
 asm/cc_main$bit.dis: asm/cc_main$bit
 	objdump -d -S asm/cc_main$bit > asm/cc_main$bit.dis
@@ -134,7 +141,8 @@ asm/cc_main$bit: asm/cc_main.c
 	\$(PERL) -S cc_harness asm/cc_main.c -fno-stack-protector -g3 -o asm/cc_main$bit -save-temps -fverbose-asm
 "
   } else {
-    "asm : asm/cc_main_nt$bit.dis asm/3-jit-hand.dis
+    $asm .
+    "asm : asm/cc_main_nt$bit.dis asm/3-jit-hand$bit.dis
 
 asm/cc_main_nt$bit.dis: asm/cc_main_nt$bit
 	objdump -d -S asm/cc_main_nt$bit > asm/cc_main_nt$bit.dis
@@ -142,9 +150,6 @@ asm/cc_main_nt$bit.dis: asm/cc_main_nt$bit
 asm/cc_main_nt$bit: asm/cc_main_nt.c
 	\$(PERL) -S cc_harness asm/cc_main_nt.c -fno-stack-protector -g3 -o asm/cc_main_nt$bit -save-temps -fverbose-asm
 
-asm/3-jit-hand.dis: asm/3-jit-hand.S
-	as asm/3-jit-hand.S -o asm/3-jit-hand.o
-	objdump -d asm/3-jit-hand.o > asm/3-jit-hand.dis
 "
   }
 }
