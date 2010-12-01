@@ -345,8 +345,8 @@ T_CHARARR NOP[]      = {0x90};    /* nop */
 #define test_eax_eax    0x85,0xc0
 /* skip call	_Perl_despatch_signals */
 #define mov_mem_resp	0xbc
-#define cmp_resp_eax    0x39,0xe0
-#define cmp_rrsp_rax    0x48,0x39,0xe0
+#define cmp_eax_resp    0x39,0xe0
+#define cmp_rax_rrsp    0x48,0x39,0xe0
 #define test_rax_rax    0x48,0x85,0xc0
 
 #ifdef USE_ITHREADS

@@ -130,17 +130,17 @@ unsigned char *push_maybranch_plop(unsigned char *code, OP* next) {
     return code;
 }
 T_CHARARR maybranch_check[] = {
-    cmp_resp_eax,
+    cmp_eax_resp,
     je(0)
 };
 unsigned char *
 push_maybranch_check(unsigned char *code, int fw) {
     unsigned char maybranch_check[] = {
-	cmp_resp_eax, 	/* saved prev op->next at 0(%rsp) */
+	cmp_eax_resp, 	/* saved prev op->next at 0(%rsp) */
 	je_0};
     if (abs(fw) > 128) {
         CODE maybranch_checkw[] = {
-            cmp_rrsp_rax,
+            cmp_rax_rrsp,
             jew_0};
         PUSHc(maybranch_checkw);
         PUSHrel(fw);
