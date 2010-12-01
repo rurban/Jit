@@ -5,12 +5,12 @@
 .globl _runops_jit_0
 	.def	_runops_jit_0;	.scl	2;	.type	32;	.endef
 
-# PL_op in eax, &PL_op in ebx, &PL_sig_pending in -4(%ebp), local op in %esp
+# PL_op in eax, &PL_op in ebx, &PL_sig_pending in -4(%ebp), local op in (%esp)
 _runops_jit_0:
 prolog:
 	enter   $8,$0
         pushl 	%ebx
-	pushl	%ecx
+#	pushl	%ecx
         # movl    0x8(%ebp),%ebx ; threaded:      Iop is at 8 from my_perl
 	movl	$_PL_op, %ebx
 	movl	$_Perl_Isig_pending_ptr, -4(%ebp)
@@ -37,7 +37,7 @@ L2:
         mov    %eax, (%ebx)
         call   _Perl_pp_gt
         mov    %eax, (%ebx)
-        mov    $0x10329c0, %esp 	#  op = PL_op->op_next
+        movl   $_op, 0(%esp) 	#  op = PL_op->op_next
         call   _Perl_pp_entersub
         mov    %eax, (%ebx)
         test   %eax, %eax        	#  if (!PL_op) return;
@@ -47,7 +47,7 @@ L2:
         leave
         ret
 sub_1_next:      
-        cmp    %esp, %eax		#  if (PL_op != op) call (PL_op->op_ppaddr)();
+        cmp    %eax,(%esp)		#  if (PL_op != op) call (PL_op->op_ppaddr)();
         je     sub_1_end
         add    $8, %eax			# +op_ppaddr offset
         call   *%eax			# call sub dynamically (unjitted)
@@ -56,7 +56,7 @@ sub_1_end:
 	call	_Perl_pp_padsv
 	movl	_PL_op, %eax
 	movl	%eax, -8(%ebp)
-	movl	_PL_op, %ecx
+	movl	$_PL_op, (%esp)
 	call	_Perl_pp_cond_expr
 	movl	%eax, (%ebx)
 check_sig2:        
@@ -67,9 +67,8 @@ check_sig2:
 	call	_Perl_despatch_signals
 # compare returned PL_op against prev op->op_next in %ecx        
 L3:
-	movl	_PL_op, %eax
-	cmpl	%ecx, %eax
-#	cmp	%r12, %rax
+	mov	_PL_op, %eax
+	cmp	%eax, (%esp)
 	je	next_1
 # op_other block from if (if true)
 other_1:
@@ -80,6 +79,7 @@ other_1:
 	call	_Perl_pp_print
 	movl	%eax, (%ebx)
 	jmp	leave_1
+	jmp     0x0010
 # op_next block from if (if false)
 next_1:
 	call	_Perl_pp_enter
@@ -99,7 +99,7 @@ leave_1:
 	call	_Perl_pp_leave
 	movl	%eax, (%ebx)
         
-	popl	%ecx
+#	popl	%ecx
         popl	%ebx
 	leave
 	ret
@@ -123,6 +123,7 @@ _main:
 	leal	-4(%ecx), %esp
 	ret
         
+	.comm	_op, 4, 2
 	.comm	_PL_op, 4, 2
 	.comm	_Perl_Isig_pending_ptr, 4, 2
 	.def	_Perl_pp_sassign;	.scl	2;	.type	32;	.endef

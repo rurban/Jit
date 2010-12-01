@@ -120,27 +120,27 @@ T_CHARARR amd64_dispatch[] = {
 
 T_CHARARR maybranch_plop[] = {
     /* r12 is not save during function calls, put it onto the local stack */
-    mov_mem_esp, fourbyte
+    mov_mem_resp, fourbyte
 };
 unsigned char *push_maybranch_plop(unsigned char *code, OP* next) {
     T_CHARARR maybranch_plop1[] = {
-	mov_mem_esp};
+	mov_mem_resp};
     PUSHc(maybranch_plop1);
     PUSHrel(&next);
     return code;
 }
 T_CHARARR maybranch_check[] = {
-    cmp_esp_eax,
+    cmp_resp_eax,
     je(0)
 };
 unsigned char *
 push_maybranch_check(unsigned char *code, int fw) {
     unsigned char maybranch_check[] = {
-	cmp_esp_eax, 	/* saved prev op->next at 0(%rsp) */
+	cmp_resp_eax, 	/* saved prev op->next at 0(%rsp) */
 	je_0};
     if (abs(fw) > 128) {
         CODE maybranch_checkw[] = {
-            cmp_rsp_rax,
+            cmp_rrsp_rax,
             jew_0};
         PUSHc(maybranch_checkw);
         PUSHrel(fw);
@@ -152,12 +152,12 @@ push_maybranch_check(unsigned char *code, int fw) {
 }
 
 T_CHARARR gotorel[] = {
-    0xe9, fourbyte
+    jmpq(0)
 };
 unsigned char *
 push_gotorel(unsigned char *code, U32 label) {
     unsigned char gotorel[] = {
-	0xe9};
+	jmpq_0};
     PUSHc(gotorel);
     PUSHabs(&label);
     return code;

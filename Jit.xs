@@ -63,6 +63,7 @@ LOOPTGT *looptargets = NULL;
 #ifdef DEBUGGING
 int global_label;
 int global_loops = 0;
+int local_chains = 0;
 #endif
 
 int dispatch_needed(OP* op);
@@ -322,8 +323,6 @@ T_CHARARR NOP[]      = {0x90};    /* nop */
 
 #define call 		0xe8	    /* + 4 rel */
 #define ljmp(abs) 	0xff,0x25   /* + 4 memabs */
-#define jmpq	        0xe9        /* fourbyte */
-
 
 #define mov_mem_rrsp    0xc7,0x04,0x24	/* store op->next on stack */
 #define mov_eax_4ebp 	0x89,0x45,0xfc
@@ -334,6 +333,8 @@ T_CHARARR NOP[]      = {0x90};    /* nop */
 #define je(byte)        0x74,(byte)
 #define jew_0        	0x0f,0x84
 #define jew(word)       0x0f,0x84,revword4(word)
+#define jmpq_0   	0xe9        /* maybranch */
+#define jmpq(word)   	0xe9,revword(word)
 
 /* mov    %rax,(%rbx) &PL_op in ebx */
 #define mov_rax_memr    0x48,0x89,0x05 /* + 4 rel */
@@ -343,9 +344,9 @@ T_CHARARR NOP[]      = {0x90};    /* nop */
 #define mov_redx_eax    0x82,0x02
 #define test_eax_eax    0x85,0xc0
 /* skip call	_Perl_despatch_signals */
-#define mov_mem_esp	0xbc
-#define cmp_esp_eax     0x39,0xe0
-#define cmp_rsp_rax     0x48,0x39,0xe0
+#define mov_mem_resp	0xbc
+#define cmp_resp_eax    0x39,0xe0
+#define cmp_rrsp_rax    0x48,0x39,0xe0
 #define test_rax_rax    0x48,0x85,0xc0
 
 #ifdef USE_ITHREADS
@@ -396,8 +397,7 @@ T_CHARARR NOP[]      = {0x90};    /* nop */
 #define mov_mem_eax(m)	0xa1,revword(m)
 /* mov    $memabs,%ebx &PL_op in ebx */
 #define mov_mem_ebx(m)	0xbb,revword(m)
-/* mov    $memabs,%esp &PL_op to stack-0 */
-#define mov_mem_esp	0xbc
+/* mov    $memabs,0(%esp) &PL_op to stack-0 */
 #define mov_mem_ecx	0xb9
 /* &PL_sig_pending in -4(%ebp) */
 #define mov_mem_4ebp(m)	0xc7,0x45,0xfc,revword(m)
@@ -406,7 +406,8 @@ T_CHARARR NOP[]      = {0x90};    /* nop */
 #define test_eax_eax    0x85,0xc0
 #define je_0        	0x74
 #define je(byte) 	0x74,(byte)
-#define cmp_esp_eax     0x39,0xe0
+#define mov_mem_resp	0xc7,0x04,0x24
+#define cmp_eax_resp    0x39,0x04,0x24
 #define cmp_ecx_eax     0x39,0xc8
 #define mov_rebp_ebx(byte) 0x8b,0x5d,byte  /* mov 0x8(%ebp),%ebx*/
 #define test_eax_eax    0x85,0xc0
@@ -433,33 +434,36 @@ T_CHARARR NOP[]      = {0x90};    /* nop */
 
 #define call 		0xe8	    /* + 4 rel */
 #define ljmp(abs) 	0xff,0x25   /* + 4 memabs */
+#define ljmp_0 		0xff,0x25   /* + 4 memabs */
 #define mov_eax_mem 	0xa3	    /* + 4 memabs */
 #define jmpb_0   	0xeb        /* maybranch */
 #define jmpb(byte)   	0xeb,(byte) /* maybranch */
+#define jmpq_0   	0xe9        /* maybranch */
+#define jmpq(word)   	0xe9,revword(word)
 
 T_CHARARR maybranch_plop[] = {
-    mov_mem_esp,fourbyte
+    mov_mem_resp,fourbyte
 };
 CODE *
 push_maybranch_plop(CODE *code, OP* next) {
     CODE maybranch_plop[] = {
-	mov_mem_esp};
+	mov_mem_resp};
     PUSHc(maybranch_plop);
     PUSHrel(&next);
     return code;
 }
 T_CHARARR maybranch_check[] = {
-    cmp_esp_eax,
+    cmp_eax_resp,
     je(0)
 };
 CODE *
 push_maybranch_check(CODE *code, int next) {
     CODE maybranch_check[] = {
-	cmp_esp_eax,
+	cmp_eax_resp,
 	je_0};
     if (abs(next) > 128) {
         CODE maybranch_checkw[] = {
-            cmp_esp_eax,
+            cmp_eax_resp,
             jew_0};
         PUSHc(maybranch_checkw);
         PUSHrel((CODE*)next);
@@ -480,14 +484,14 @@ push_maybranch_check(CODE *code, int next) {
    XXX TODO %ecx is not preserved between function calls. Need to use the stack.
 */
 T_CHARARR gotorel[] = {
-    jmpb(0)
+    jmpq(0)
 };
 CODE *
 push_gotorel(CODE *code, int label) {
     CODE gotorel[] = {
-	jmpb_0};
+	jmpq_0};
     PUSHc(gotorel);
-    PUSHbyte(label);
+    PUSHabs(&label);
     return code;
 }
 
@@ -723,7 +727,8 @@ jit_chain(pTHX_
 
     if (!dryrun) {
 	opname = (char*)PL_op_name[op->op_type];
-        fprintf(fh, "/* block jit_chain_%d op 0x%x pp_%s; */\n", global_loops, op, opname);
+        fprintf(fh, "/* block jit_chain_%d op 0x%x pp_%s; */\n", local_chains, op, opname);
+        local_chains++;
         line++;
     }
 #endif
@@ -805,10 +810,10 @@ jit_chain(pTHX_
         /* XXX TODO
          * We have almost no chance to get the CvSTART of the sub here, better in the parser.
          * But we can try checking a CvSTART:
-         * - On XS function the CvSTART is added dynamically at run-time, but 
-         *   it makes no sense to jit already compiled XS code.
-         * - autoloaded non-xs code would be good to jit, but we'd need a run-time 
-         *   check for the CvSTART, and Jit it at run-time.
+         * - On XS functions the CvSTART is added dynamically at run-time,
+         *   but it makes no sense to jit already compiled XS code. Good.
+         * - autoloaded non-xs code would be good to jit, but we'd need 
+         *   a run-time check for the CvSTART, and Jit it at run-time.
          * For now we can only call unjitted functions.
          * We'd have to call entersub, but then we'd need the prev. 
          * context (name in the prev gv),
@@ -942,14 +947,16 @@ jit_chain(pTHX_
                     other = JIT_CHAIN_DRYRUN(logop->op_other); /* sizeof other */
                     other += sizeof(GOTOREL);
                     code = push_maybranch_check(code, other); /* if cmp: je => next */
+                    dbg_lines1("if (PL_op != op) goto next_%d;", global_label);
                     DEBUG_v( printf("size=%x\n", other) );
                     code = JIT_CHAIN(logop->op_other);
-                    dbg_lines1("goto next_%d;", global_label);
+                    dbg_cline1("/*goto logop_%d;*/", global_label);
+                    dbg_lines1("next_%d:", global_label);
                     next = JIT_CHAIN_DRYRUN(logop->op_next);  /* sizeof next */
                     DEBUG_v( printf("# next_%d: %s, size=%x\n", global_label, 
                                     PL_op_name[logop->op_next->op_type], next));
                     code = push_gotorel(code, next);
-                    dbg_lines1("next_%d:", global_label);
+                    /*dbg_lines1("logop_%d:", global_label);*/
                 }
 	    } else { /* special branches */
 		int next;
@@ -1272,8 +1279,8 @@ Perl_runops_jit(pTHX)
     int pagesize = 4096, size = 0;
 #ifdef PROFILING
     SV *sv_prof;
-    int profiling = 1;
     NV bench;
+    int profiling = 1; /* default on, but can be turned off via $Jit::_profiling=0; */
     sv_prof = get_sv("Jit::_profiling", 0);
     if (sv_prof) {
         profiling = SvIV_nomg(sv_prof);
@@ -1424,10 +1431,10 @@ Perl_runops_jit(pTHX)
     DEBUG_v( printf("# &PL_sig_pending \t= 0x%x\n", &PL_sig_pending) );
 #  endif
 # endif
-    global_loops++;
+    global_loops++;    
 #endif
-    /*if (jmptargets) free(jmptargets);
-      if (looptargets) free(looptargets);*/
+    if (jmptargets) free(jmptargets);
+    if (looptargets) free(looptargets);
     /*I_ASSERT(size == (code - code_start));*/
     /*size = code - code_start;*/
 
@@ -1478,7 +1485,7 @@ Perl_runops_jit(pTHX)
     }
 #endif
 
-/*================= Jit.xs:859 runops_jit_0 == disassemble code code+40 =====*/
+/*================= Jit.xs:1486 runops_jit_0 == disassemble code code+40 =====*/
     (*((void (*)(pTHX))code))(aTHX);
 /*================= runops_jit ==============================================*/
     DEBUG_l(Perl_deb(aTHX_ "leaving RUNOPS JIT level\n"));
