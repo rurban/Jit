@@ -382,6 +382,7 @@ T_CHARARR NOP[]      = {0x90};    /* nop */
 #define push_edi 	0x57
 #define push_esi	0x56
 #define push_ecx	0x51
+#define push_edx	0x52
 #define sub_x_esp(byte) 0x83,0xec,byte
 #define mov_eax_rebx	0x89,0x03	/* mov    %rax,(%rbx) &PL_op in ebx */
 
@@ -421,6 +422,7 @@ T_CHARARR NOP[]      = {0x90};    /* nop */
 #define add_x_esp(byte) 0x83,0xc4,byte	/* add    $0x4,%esp */
 #define pop_ecx    	0x59
 #define pop_ebx 	0x5b
+#define pop_edx 	0x5a
 #define pop_esi 	0x5e
 #define pop_edi 	0x5f
 #define pop_ebp 	0x5d
@@ -440,39 +442,6 @@ T_CHARARR NOP[]      = {0x90};    /* nop */
 #define jmpb(byte)   	0xeb,(byte) /* maybranch */
 #define jmpq_0   	0xe9        /* maybranch */
 #define jmpq(word)   	0xe9,revword(word)
-
-T_CHARARR maybranch_plop[] = {
-    mov_mem_resp,fourbyte
-};
-CODE *
-push_maybranch_plop(CODE *code, OP* next) {
-    CODE maybranch_plop[] = {
-	mov_mem_resp};
-    PUSHc(maybranch_plop);
-    PUSHrel(&next);
-    return code;
-}
-T_CHARARR maybranch_check[] = {
-    cmp_eax_resp,
-    je(0)
-};
-CODE *
-push_maybranch_check(CODE *code, int next) {
-    CODE maybranch_check[] = {
-	cmp_eax_resp,
-	je_0};
-    if (abs(next) > 128) {
-        CODE maybranch_checkw[] = {
-            cmp_eax_resp,
-            jew_0};
-        PUSHc(maybranch_checkw);
-        PUSHrel((CODE*)next);
-    } else {
-        PUSHc(maybranch_check);
-        PUSHbyte(next);
-    }
-    return code;
-}
 
 #ifdef USE_ITHREADS
 # include "i386thr.c"
@@ -779,9 +748,9 @@ jit_chain(pTHX_
                 char *label;
                 JMPTGT cx;
 #ifdef CopLABEL
-                if (label = CopLABEL((COP*)op))
+                if (label = CopLABEL(cCOPx(op)))
 #else
-                if (label = ((COP*)op)->cop_label)
+                if (label = cCOPx(op)->cop_label)
 #endif
                 {
                     cx.op = op;
@@ -825,9 +794,9 @@ jit_chain(pTHX_
             /* first jit the sub, then loop through it.
                loop CvROOT until !PL_op */
             /*OP* next = Perl_pp_entersub(aTHX); / * find CvSTART */
-            UNOP* next = ((UNOP*)op)->op_first;
+            UNOP* next = cUNOPx(op)->op_first;
             if (next) {
-                next = next->op_next;
+                next = (UNOP*)(next->op_next);
                 if (dryrun) {
                     size += JIT_CHAIN_FULL_DRYRUN((OP*)next, opnext);
                 } else {
@@ -1327,7 +1296,7 @@ Perl_runops_jit(pTHX)
     size += sizeof(PROLOG);
     size += JIT_CHAIN_DRYRUN(PL_op);
     size += sizeof(EPILOG);
-    while ((size | 0xfffffff0) % 4) { size++; }
+    while ((size | 0xfffffff0) % PTRSIZE) { size++; }
 #ifdef _WIN32
     code = VirtualAlloc(NULL, size,
 			MEM_COMMIT | MEM_RESERVE,
@@ -1404,8 +1373,8 @@ Perl_runops_jit(pTHX)
     PL_op = root;
     code = (CODE*)JIT_CHAIN(PL_op);
     PUSHc(EPILOG);
-    while (((unsigned int)&code | 0xfffffff0) % 4) { *(code++) = NOP[0]; }
-    /* XXX patchup missed jmptargets */
+    while (((unsigned int)&code | 0xfffffff0) % PTRSIZE) { *(code++) = NOP[0]; }
+    /* XXX TODO patchup missed jmp or sub or loop targets */
 
 #ifdef PROFILING
     if (profiling) {

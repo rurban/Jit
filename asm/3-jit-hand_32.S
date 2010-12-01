@@ -10,6 +10,7 @@ _runops_jit_0:
 prolog:
 	enter   $8,$0
         pushl 	%ebx
+        pushl 	%edx
 #	pushl	%ecx
         # movl    0x8(%ebp),%ebx ; threaded:      Iop is at 8 from my_perl
 	movl	$_PL_op, %ebx
@@ -42,7 +43,7 @@ L2:
         mov    %eax, (%ebx)
         test   %eax, %eax        	#  if (!PL_op) return;
         je     sub_1_next
-        pop    %ecx
+        pop    %edx
         pop    %ebx
         leave
         ret
@@ -100,6 +101,7 @@ leave_1:
 	movl	%eax, (%ebx)
         
 #	popl	%ecx
+        popl 	%edx
         popl	%ebx
 	leave
 	ret
