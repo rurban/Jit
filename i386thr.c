@@ -90,28 +90,30 @@ T_CHARARR x86thr_dispatch[] = {
 }; /* call   Perl_despatch_signals */
 
 T_CHARARR maybranch_plop[] = {
-    mov_mem_resp,fourbyte
+    mov_mem_rebp8,fourbyte
 };
 CODE *
 push_maybranch_plop(CODE *code, OP* next) {
     CODE maybranch_plop[] = {
-	mov_mem_resp};
+	mov_mem_rebp8};
     PUSHc(maybranch_plop);
     PUSHrel(&next);
     return code;
 }
 T_CHARARR maybranch_check[] = {
-    cmp_eax_resp,
-    je(0)
-};
+    cmp_eax_rebp8,
+    je_0, fourbyte};
+T_CHARARR maybranch_checkw[] = {
+    cmp_eax_rebp8,
+    jew_0, fourbyte};
 CODE *
 push_maybranch_check(CODE *code, int next) {
     CODE maybranch_check[] = {
-	cmp_eax_resp,
+	cmp_eax_rebp8,
 	je_0};
     if (abs(next) > 128) {
         CODE maybranch_checkw[] = {
-            cmp_eax_resp,
+            cmp_eax_rebp8,
             jew_0};
         PUSHc(maybranch_checkw);
         PUSHrel((CODE*)next);

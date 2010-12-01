@@ -328,7 +328,7 @@ T_CHARARR NOP[]      = {0x90};    /* nop */
 #define mov_eax_4ebp 	0x89,0x45,0xfc
 #define mov_mem_r12	0x41,0xbc 	/* movq PL_op->next, %r12 */
 #define cmp_rax_r12     0x49,0x39,0xc4
-#define cmp_rax_rrsp    0x48,0x39,0x44,0x24,0x00 /* check returned op against stack */
+
 #define je_0        	0x74
 #define je(byte)        0x74,(byte)
 #define jew_0        	0x0f,0x84
@@ -344,10 +344,14 @@ T_CHARARR NOP[]      = {0x90};    /* nop */
 #define mov_redx_eax    0x82,0x02
 #define test_eax_eax    0x85,0xc0
 /* skip call	_Perl_despatch_signals */
-#define mov_mem_resp	0xbc
-#define cmp_eax_resp    0x39,0xe0
-#define cmp_rax_rrsp    0x48,0x39,0xe0
-#define test_rax_rax    0x48,0x85,0xc0
+#define mov_mem_rebp8   0xc7,0x45,0xf8  	/* mov &op,-8(%rbp) */
+#define cmp_eax_rebp8   0x39,0x45,0xf8  	/* cmp %eax,,-8(%rbp) */
+#if 0
+#define mov_mem_resp1	0xc7,0x44,0x24,0x0fc
+#define cmp_eax_resp1   0x39,0x44,0x24,0xfc /* 4 byte cmp %eax,4(%rsp) */
+#endif
+/*#define cmp_rax_rrsp    0x48,0x39,0xe0 *//* 8 byte */
+/*#define test_rax_rax    0x48,0x85,0xc0*/
 
 #ifdef USE_ITHREADS
 # include "amd64thr.c"
@@ -407,8 +411,13 @@ T_CHARARR NOP[]      = {0x90};    /* nop */
 #define test_eax_eax    0x85,0xc0
 #define je_0        	0x74
 #define je(byte) 	0x74,(byte)
-#define mov_mem_resp	0xc7,0x04,0x24
-#define cmp_eax_resp    0x39,0x04,0x24
+
+#define mov_mem_rebp8   0xc7,0x45,0xf8  	/* mov &op,-8(%rbp) */
+#define cmp_eax_rebp8   0x39,0x45,0xf8  	/* cmp %eax,,-8(%rbp) */
+#if 0
+#define mov_mem_resp1	0xc7,0x44,0x24,0xfc
+#define cmp_eax_resp1   0x39,0x44,0x24,0xfc /* 4 byte cmp %eax,4(%rsp) */
+#endif
 #define cmp_ecx_eax     0x39,0xc8
 #define mov_rebp_ebx(byte) 0x8b,0x5d,byte  /* mov 0x8(%ebp),%ebx*/
 #define test_eax_eax    0x85,0xc0
@@ -470,13 +479,27 @@ push_gotorel(CODE *code, int label) {
 #endif /* EOF i386 */
 
 #if defined(JIT_CPU_X86) || defined(JIT_CPU_AMD64)
+
+int
+sizeof_maybranch_check(int fw) {
+    if (abs(fw) > 128) {
+        return sizeof(maybranch_checkw);
+    } else {
+        return sizeof(maybranch_check);
+    }
+}
+
 T_CHARARR ifop0return[] = {
     test_eax_eax,
-    je(sizeof(EPILOG)),
+    je(sizeof(EPILOG))
 };
 T_CHARARR ifop0goto[] = {
     test_eax_eax,
-    je(0)
+    je_0, fourbyte
+};
+T_CHARARR ifop0gotow[] = {
+    test_eax_eax,
+    jew_0, fourbyte
 };
 CODE *
 push_ifop0goto(CODE *code, int next) {
@@ -903,8 +926,8 @@ jit_chain(pTHX_
 	    }
 	    if ((PL_opargs[op->op_type] & OA_CLASS_MASK) == OA_LOGOP) {
                 if (dryrun) {
-                    size += sizeof(maybranch_check);
-                    size += JIT_CHAIN_DRYRUN(cLOGOPx(op)->op_other);
+                    int i = JIT_CHAIN_DRYRUN(cLOGOPx(op)->op_other);
+                    size += i + sizeof_maybranch_check(i);
                     size += sizeof(GOTOREL);
                 } else {
                     int next, other;
@@ -941,8 +964,8 @@ jit_chain(pTHX_
                         LOGOP* logop;
                         logop = cLOGOPx(cUNOPx(op)->op_first);
                         if (dryrun) {
-                            size += JIT_CHAIN_DRYRUN(logop->op_other);
-                            size += sizeof(maybranch_check);
+                            int i = JIT_CHAIN_DRYRUN(logop->op_other);
+			    size += i + sizeof_maybranch_check(i);
                             size += sizeof(GOTOREL);
                         } else {
                             int other;

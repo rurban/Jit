@@ -77,7 +77,7 @@ T_CHARARR amd64_prolog[] = {
 };
 
 unsigned char *push_prolog(unsigned char *code) {
-    T_CHARARR prolog1[] = {
+    CODE prolog1[] = {
         enter_8,
 	push_rbx
 #ifdef HAVE_DISPATCH
@@ -120,27 +120,31 @@ T_CHARARR amd64_dispatch[] = {
 
 T_CHARARR maybranch_plop[] = {
     /* r12 is not save during function calls, put it onto the local stack */
-    mov_mem_resp, fourbyte
+    mov_mem_rebp8, fourbyte
 };
 unsigned char *push_maybranch_plop(unsigned char *code, OP* next) {
-    T_CHARARR maybranch_plop1[] = {
-	mov_mem_resp};
+    CODE maybranch_plop1[] = {
+	mov_mem_rebp8};
     PUSHc(maybranch_plop1);
     PUSHrel(&next);
     return code;
 }
 T_CHARARR maybranch_check[] = {
-    cmp_eax_resp,
-    je(0)
+    cmp_eax_rebp8,
+    je_0,fourbyte
+};
+T_CHARARR maybranch_checkw[] = {
+    cmp_eax_rebp8,
+    jew_0,fourbyte
 };
 unsigned char *
 push_maybranch_check(unsigned char *code, int fw) {
-    unsigned char maybranch_check[] = {
-	cmp_eax_resp, 	/* saved prev op->next at 0(%rsp) */
+    CODE maybranch_check[] = {
+	cmp_eax_rebp8, 	/* saved prev op->next at -4(%esp) */
 	je_0};
     if (abs(fw) > 128) {
         CODE maybranch_checkw[] = {
-            cmp_rax_rrsp,
+            cmp_eax_rebp8,
             jew_0};
         PUSHc(maybranch_checkw);
         PUSHrel(fw);
@@ -156,7 +160,7 @@ T_CHARARR gotorel[] = {
 };
 unsigned char *
 push_gotorel(unsigned char *code, U32 label) {
-    unsigned char gotorel[] = {
+    CODE gotorel[] = {
 	jmpq_0};
     PUSHc(gotorel);
     PUSHabs(&label);

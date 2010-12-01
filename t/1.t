@@ -7,7 +7,7 @@ my $c = qq($X $blib -MJit);
 $c .= " -Dv" if $Config{ccflags} =~ /-DDEBUGGING/ and $] > 5.008;
 print "# ";
 for (qw(ptrsize useithreads usemultiplicity gccversion byteorder alignbytes ccflags archname)) {
-  print "$_=",exists $Config{$_} ? $Config{$_} : '',", ";
+  print "$_=", defined $Config{$_} ? $Config{$_} : '',", ";
 }
 print "\n";
 #TODO print result of memalign checks for cpantester reports

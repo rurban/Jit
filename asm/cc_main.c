@@ -10,12 +10,12 @@ static OP * pp_main(register PerlInterpreter* my_perl);
 # else
 #  define PERL_ASYNC_CHECK
 #endif
-OP *myop;
 
 static OP * pp_main(register PerlInterpreter* my_perl) 
 {
     register OP* op;
     register int *p = &PL_sig_pending;
+    OP *myop = PL_op;
 #ifdef DEBUGGING
     debstack();
     debop(myop);
@@ -56,6 +56,6 @@ int
 main(int argc, char **argv, char **env)
 {
     PerlInterpreter *my_perl;
-    myop = newOP(OP_ENTER, 0);
-    pp_main(aTHX);
+    OP *myop = newOP(OP_ENTER, 0);
+    pp_main(my_perl);
 }

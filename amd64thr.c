@@ -72,28 +72,32 @@ T_CHARARR amd64thr_dispatch[] = {
 #define mov_rrax_r12	0x4c,0x8b,0x20
 
 T_CHARARR maybranch_plop[] = {
-    mov_mem_esp, fourbyte
+    mov_mem_rebp8, fourbyte
 };
 unsigned char *
 push_maybranch_plop(unsigned char *code, OP* next) {
     T_CHARARR maybranch_plop1[] = {
-	mov_mem_esp};
+	mov_mem_rebp8};
     PUSHc(maybranch_plop1);
     PUSHabs(next);
     return code;
 }
 T_CHARARR maybranch_check[] = {
-    cmp_rsp_rax,
+    cmp_eax_rebp8,
     je(0)
+};
+T_CHARARR maybranch_checkw[] = {
+    cmp_eax_rebp8,
+    jew(0)
 };
 unsigned char *
 push_maybranch_check(unsigned char *code, int next) {
-    unsigned char maybranch_check[] = {
-	cmp_rsp_rax,
+    CODE maybranch_check[] = {
+	cmp_eax_rebp8,
 	je_0};
     if (abs(next) > 128) {
         CODE maybranch_checkw[] = {
-            cmp_rsp_rax,
+	    cmp_eax_rebp8,
             jew_0};
         PUSHc(maybranch_checkw);
         PUSHrel(next);
@@ -109,7 +113,7 @@ T_CHARARR gotorel[] = {
 };
 unsigned char *
 push_gotorel(unsigned char *code, U32 label) {
-    unsigned char gotorel[] = {
+    T_CHARARR gotorel[] = {
 	0xe9};
     PUSHc(gotorel);
     PUSHabs(&label);
