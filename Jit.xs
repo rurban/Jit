@@ -1319,7 +1319,9 @@ Perl_runops_jit(pTHX)
     size += sizeof(PROLOG);
     size += JIT_CHAIN_DRYRUN(PL_op);
     size += sizeof(EPILOG);
-    while ((size | 0xfffffff0) % PTRSIZE) { size++; }
+    while ((size | 0xfffffff0) % PTRSIZE) { 
+        size++;
+    }
 #ifdef _WIN32
     code = VirtualAlloc(NULL, size,
 			MEM_COMMIT | MEM_RESERVE,
@@ -1396,7 +1398,9 @@ Perl_runops_jit(pTHX)
     PL_op = root;
     code = (CODE*)JIT_CHAIN(PL_op);
     PUSHc(EPILOG);
-    while (((unsigned int)&code | 0xfffffff0) % PTRSIZE) { *(code++) = NOP[0]; }
+    while (((unsigned int)code | 0xfffffff0) % PTRSIZE) { 
+        *(code++) = NOP[0];
+    }
     /* XXX TODO patchup missed jmp or sub or loop targets */
 
 #ifdef PROFILING
