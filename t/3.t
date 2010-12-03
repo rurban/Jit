@@ -22,7 +22,7 @@ print " TODO" if $have_dispatch;
 print " 2nd branch next";
 print "\n";
 my $childerr = $? >> 8;
-print $childerr ? ("not ok 2 # exitcode $childerr\n") : "ok 2\n";
+print $childerr ? ("not ok 2 # TODO exitcode $childerr\n") : "ok 2\n";
 # problem with HAVE_DISPATCH. first is other, then next
 # threaded fixed by using -8(%ebp) instead of -8(%esp) for op
 

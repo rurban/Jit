@@ -1,12 +1,19 @@
-v0.04_09 2010-11-27 rurban
+v0.04_09 2010-12-03 rurban
 
 %rbx on amd64 seems not be save across function calls.
-  store op->next on 0(%rsp) ("the local stack")
-prevent also dryrun from recursive cycles, but with a different HV
+  store op->next on 0(%rsp) ("the local stack") - not.
+  store it at -8(%rbp)
+protect %edx (used in dispatch handling)
+prevent dryrun also from recursive cycles, but with a different HV
+ Fix jmp byte overflow, use word size now.
 re-work and document MAYBRANCH ops, sync with new Opcodes-0.10
-  use simple GOTO as default (searches at run-time in targets)
-first ENTERSUB attempt, but CvSTART detection would be much easier 
+  use simple GOTO as default (searches at run-time in targets, does not work yet)
+first ENTERSUB attempt, but CvSTART detection would be much easier
   from the parser
+more JIT_CHAIN helper macros
+added libdisasm
+properly NOP end of code (alignment)
+rename help dir to asm
 
 v0.04_08 2010-11-22 rurban
 

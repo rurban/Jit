@@ -349,7 +349,7 @@ T_CHARARR NOP[]      = {0x90};    /* nop */
 #define test_eax_eax    0x85,0xc0
 /* skip call	_Perl_despatch_signals */
 #define mov_mem_rebp8   0xc7,0x45,0xf8  	/* mov &op,-8(%rbp) */
-#define cmp_eax_rebp8   0x39,0x45,0xf8  	/* cmp %eax,,-8(%rbp) */
+#define cmp_eax_rebp8   0x39,0x45,0xf8  	/* cmp %eax,-8(%rbp) */
 #if 0
 #define mov_mem_resp1	0xc7,0x44,0x24,0x0fc
 #define cmp_eax_resp1   0x39,0x44,0x24,0xfc /* 4 byte cmp %eax,4(%rsp) */
