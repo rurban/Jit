@@ -25,6 +25,10 @@
 #include <sys/stat.h>
 #endif
 
+#if defined(HAVE_LIBDISASM) && defined(DEBUGGING)
+#include <libdis.h>
+#endif
+
 typedef unsigned char CODE;
 #define T_CHARARR static CODE
 #undef JIT_CPU
@@ -1234,7 +1238,7 @@ jit_chain(pTHX_
         op = startop;
         return size;
     } else {
-        return (int)code;
+        return (long)code;
     }
 }
 
@@ -1298,12 +1302,12 @@ Perl_runops_jit(pTHX)
     fh = fopen("run-jit.c", "a");
     fprintf(fh,
             "struct op { OP* op_next; OP* op_other } OP;"
-#ifdef USE_ITHREADS
+# ifdef USE_ITHREADS
 	    "struct PerlInterpreter { OP* IOp; int Isig_pending; };"
-#endif
-#if (PERL_VERSION > 6) && (PERL_VERSION < 13)
+# endif
+# if (PERL_VERSION > 6) && (PERL_VERSION < 13)
 	    "void *PL_sig_pending;"
-#endif
+# endif
             "OP *PL_op; void runops_jit_%d (void);\n"
 	    "void runops_jit_%d (void){ OP* op;\n"
             , global_loops, global_loops);
@@ -1351,11 +1355,11 @@ Perl_runops_jit(pTHX)
         DEBUG_v( printf("# manually align code=0x%x newsize=%x\n",code, size + newsize) );
         if ((int)code & (pagesize-1)) {
             /* hardcode pagesize = 4096 */
-#if PTRSIZE == 4
+#   if PTRSIZE == 4
             code = (char*)(((int)code & 0xfffff000) + 0x1000);
-#else
+#   else
             code = (char*)(((int)code & 0xfffffffffffff000) + 0x1000);
-#endif
+#   endif
             DEBUG_v( printf("# re-aligned stripped code=0x%x size=%u\n",code, size) );
         }
     }
@@ -1396,11 +1400,9 @@ Perl_runops_jit(pTHX)
     /* pass 2: jit */
     code = push_prolog(code);
     PL_op = root;
-    code = (CODE*)JIT_CHAIN(PL_op);
+    code = JIT_CHAIN(PL_op);
     PUSHc(EPILOG);
-    while (((unsigned int)code | 0xfffffff0) % PTRSIZE) { 
-        *(code++) = NOP[0];
-    }
+    while (((unsigned int)code | 0xfffffff0) % PTRSIZE) { *(code++) = NOP[0]; }
     /* XXX TODO patchup missed jmp or sub or loop targets */
 
 #ifdef PROFILING
@@ -1447,14 +1449,16 @@ Perl_runops_jit(pTHX)
     if (DEBUG_v_TEST) {
         DEBUG_v( printf("# &PL_op   \t= 0x%x / *0x%x\n", &PL_op, PL_op) );
         DEBUG_t( printf("# debop   \t= 0x%x\n", &Perl_debop) );
-#ifdef USE_ITHREADS
+# ifdef USE_ITHREADS
         DEBUG_v( printf("# &my_perl \t= 0x%x / *0x%x\n", &my_perl, my_perl) );
-#endif
-        DEBUG_v( printf("# code() 0x%x size %d",code,size) );
+# endif
+        DEBUG_v( printf("# code() 0x%x size %d (0x%x)",code,size,size) );
+# ifndef HAVE_LIBDISASM
         for (i=0; i < size; i++) {
             if (!(i % 8)) DEBUG_v( printf("\n#(code+%3x): ", i) );
             DEBUG_v( printf("%02x ",code[i]) );
         }
+# endif
         DEBUG_v( printf("\n# runops_jit_%d\n",global_loops-1) );
     }
 
@@ -1470,14 +1474,41 @@ Perl_runops_jit(pTHX)
 
      */
     if (DEBUG_v_TEST) {
-        fh = fopen("run-jit.bin", "w");
+# ifdef HAVE_LIBDISASM
+#  define LINE_SIZE 255
+	char line[LINE_SIZE];
+	int pos = 0;
+	int insnsize;            /* size of instruction */
+	x86_insn_t insn;         /* one instruction */
+
+	x86_init(opt_none, NULL, NULL);
+	while ( pos < size ) {
+	    insnsize = x86_disasm(code, size, 0, pos, &insn);
+	    if ( insnsize ) {
+		x86_format_insn(&insn, line, LINE_SIZE, att_syntax);
+		printf("#(code+%3x): ", pos);
+		for ( i = 0; i < 10; i++ ) {
+		    if ( i < insn.size ) printf(" %02x", insn.bytes[i]);
+		    else printf("   ");
+		}
+		printf("%s\n", line);
+		pos += insnsize;
+	    } else {
+		printf("# Invalid instruction at 0x%x. size=0x%x\n", pos, size);
+		pos++;
+	    }
+	}
+	x86_cleanup();
+# else
+	fh = fopen("run-jit.bin", "w");
         fwrite(code,size,1,fh);
         fclose(fh);
         system("objdump -D --target=binary --architecture i386"
-#ifdef JIT_CPU_AMD64
+#  ifdef JIT_CPU_AMD64
                ":x86-64"
-#endif
+#  endif
                " run-jit.bin");
+# endif
     }
 #endif
 

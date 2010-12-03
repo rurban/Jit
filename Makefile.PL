@@ -6,6 +6,7 @@ use ExtUtils::Embed qw(ccopts ldopts);
 
 my $core = grep { $_ eq 'PERL_CORE=1' } @ARGV;
 
+my $libs = $Config{libs};
 my $ccflags = $Config{ccflags};
 my $lddlflags = $Config{lddlflags};
 if ($^O eq 'darwin') {
@@ -82,6 +83,14 @@ if ($^O ne 'MSWin32') {
     $ccflags .= " -DHAVE_POSIX_MEMALIGN";
   }
 }
+
+# check for libdisasm: http://bastard.sourceforge.net/libdisasm.html
+# tested with libdisasm-0.23
+if (-e "/usr/local/lib/libdisasm.a" and $Config{ccflags} =~ /-DDEBUGGING/) {
+  $ccflags .= " -DHAVE_LIBDISASM";
+  $libs .= " -ldisasm";
+}
+
 my $clean_t = File::Spec->catfile("t", "_t4*.pl")." ";
 # $clean_t .= File::Spec->catfile("asm", "*.dis")." ";
 $clean_t .= File::Spec->catfile("asm", "*".$Config{obj_ext})." ";
@@ -93,6 +102,7 @@ WriteMakefile
   NAME	    	=> "Jit",
   VERSION_FROM  => "lib/Jit.pm",
   CCFLAGS       => $ccflags,
+  LIBS          => $libs,
   PREREQ_PM => {
     'sigtrap' => 1.00,
   },
