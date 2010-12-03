@@ -16,12 +16,16 @@ my $p = q( -e 'my $a=1; my $ok=q(ok 1);if($a>2){print q(nok ),$ok; } else { prin
 $c .= " -Dv" if $dbg and $] > 5.008;
 
 print "# gdb --args $c $p\n" if $dbg;
-system(qq($c $p));
+$r = `$c $p`;
+my $childerr = $? >> 8;
+print $r,"\n";
+if ($r !~ /ok 1/m) {
+  print "not ok 1";
+}
 print " #";
 print " TODO" if $have_dispatch;
 print " 2nd branch next";
 print "\n";
-my $childerr = $? >> 8;
 print $childerr ? ("not ok 2 # TODO exitcode $childerr\n") : "ok 2\n";
 # problem with HAVE_DISPATCH. first is other, then next
 # threaded fixed by using -8(%ebp) instead of -8(%esp) for op

@@ -7,6 +7,7 @@ disfunc
 .gdbinit
 asm/3-jit.c
 asm/3-jit-hand_32.S
+asm/3-jit-hand_nt_32.S
 asm/3-jit-hand_64.S
 asm/cc_main.c
 asm/cc_main_nt.c
