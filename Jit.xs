@@ -25,6 +25,10 @@
 #include <sys/stat.h>
 #endif
 
+#if defined(HAVE_LIBDISASM) && defined(DEBUGGING)
+#include <libdis.h>
+#endif
+
 typedef unsigned char CODE;
 #define T_CHARARR static CODE
 #undef JIT_CPU
@@ -1234,7 +1238,7 @@ jit_chain(pTHX_
         op = startop;
         return size;
     } else {
-        return (int)code;
+        return (long)code;
     }
 }
 
@@ -1394,7 +1398,7 @@ Perl_runops_jit(pTHX)
     /* pass 2: jit */
     code = push_prolog(code);
     PL_op = root;
-    code = (CODE*)JIT_CHAIN(PL_op);
+    code = JIT_CHAIN(PL_op);
     PUSHc(EPILOG);
     while (((unsigned int)&code | 0xfffffff0) % PTRSIZE) { *(code++) = NOP[0]; }
     /* XXX TODO patchup missed jmp or sub or loop targets */
@@ -1443,14 +1447,16 @@ Perl_runops_jit(pTHX)
     if (DEBUG_v_TEST) {
         DEBUG_v( printf("# &PL_op   \t= 0x%x / *0x%x\n", &PL_op, PL_op) );
         DEBUG_t( printf("# debop   \t= 0x%x\n", &Perl_debop) );
-#ifdef USE_ITHREADS
+# ifdef USE_ITHREADS
         DEBUG_v( printf("# &my_perl \t= 0x%x / *0x%x\n", &my_perl, my_perl) );
-#endif
+# endif
         DEBUG_v( printf("# code() 0x%x size %d",code,size) );
+# ifndef HAVE_LIBDISASM
         for (i=0; i < size; i++) {
             if (!(i % 8)) DEBUG_v( printf("\n#(code+%3x): ", i) );
             DEBUG_v( printf("%02x ",code[i]) );
         }
+# endif
         DEBUG_v( printf("\n# runops_jit_%d\n",global_loops-1) );
     }
 
@@ -1466,14 +1472,41 @@ Perl_runops_jit(pTHX)
 
      */
     if (DEBUG_v_TEST) {
-        fh = fopen("run-jit.bin", "w");
+# ifdef HAVE_LIBDISASM
+#  define LINE_SIZE 128
+	char line[LINE_SIZE];    /* buffer of line to print */
+	int pos = 0;             /* current position in buffer */
+	int insnsize;               /* size of instruction */
+	x86_insn_t insn;         /* instruction */
+
+	x86_init(opt_none, NULL, NULL);
+	while ( pos < size ) {
+	    insnsize = x86_disasm(code, size, 0, pos, &insn);
+	    if ( insnsize ) {
+		x86_format_insn(&insn, line, LINE_SIZE, att_syntax);
+		printf("%3x: ", pos);
+		for ( i = 0; i < 10; i++ ) {
+		    if ( i < insn.size ) printf(" %02x", insn.bytes[i]);
+		    else printf("   ");
+		}
+		printf("%s\n", line);
+		pos += insnsize;
+	    } else {
+		printf("Invalid instruction\n");
+		pos++;
+	    }
+	}
+	x86_cleanup();
+# else
+	fh = fopen("run-jit.bin", "w");
         fwrite(code,size,1,fh);
         fclose(fh);
         system("objdump -D --target=binary --architecture i386"
-#ifdef JIT_CPU_AMD64
+#  ifdef JIT_CPU_AMD64
                ":x86-64"
-#endif
+#  endif
                " run-jit.bin");
+# endif
     }
 #endif
 
