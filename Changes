@@ -1,3 +1,7 @@
+v0.04_10
+
+remove unused returnother, LOGOP wo/ entertry it is
+
 v0.04_09 2010-12-03 rurban
 
 %rbx on amd64 seems not be save across function calls.

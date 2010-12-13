@@ -8,12 +8,35 @@
 #      Assemble into a mprotected string and call into it instead of the runloop
 
 package Jit;
-our $VERSION = '0.04_09';
+our $VERSION = '0.04_10';
 require DynaLoader;
 use vars qw( @ISA $VERSION );
 @ISA = qw(DynaLoader);
+my (%only, %ignore);
 
 Jit->bootstrap($VERSION);
+
+# optional args: package names, sub names, regex?
+sub import {
+  shift;
+  if (@_) {
+    warn "use Jit names... not yet implemented\n";
+    for (@_) { $Jit::only{$_} = 1; }
+  } else {
+    $^H |= $Jit::HINT_JIT_FLAGS;
+  }
+}
+
+sub unimport {
+  shift;
+  if (@_) {
+    warn "no Jit names... not yet implemented\n";
+    for (@_) { $Jit::ignore{$_} = 1; }
+  } else {
+    $^H &= ~ $Jit::HINT_JIT_FLAGS;
+    warn "{ no Jit; ... } lexical-scope jitting not yet implemented\n";
+  }
+}
 
 =pod
 
@@ -21,12 +44,33 @@ Jit->bootstrap($VERSION);
 
 Jit the perl5 runops loop in proper execution order
 
+=head1 SYNOPSIS
+
+  perl -MJit ...
+    or
+  use Jit; # jit most functions
+
+planned:
+
+  use Jit qw(My this::sub);     # jit some packages or subs only
+  no Jit qw(My::OtherPackage other::sub);  # but do not jit some other packages or subs
+
+  {
+    use Jit; # jit only this block
+    ...
+  }
+
+  {
+    no Jit; # do not Jit this block
+    ...
+  }
+
 =head1 DESCRIPTION
 
-WARNING: It does only work yet for simple functions! No branches, no non-local jumps.
-Only intel CPU's 32 and 64bit (i386 and amd64).
-
 This perl5 jitter is super-simple.
+
+WARNING: It does only work yet for simple functions! No non-local jumps.
+Only Intel CPU's 32 and 64bit, i386 and amd64.
 
 The original compiled optree from the perl5 parser is a linked list in memory in
 non-execution order, with wide-spread jumps, almost in reverse order.
