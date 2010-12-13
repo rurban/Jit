@@ -653,24 +653,6 @@ maybranch(OP* op) {
     }
 }
 
-int
-returnother(OP* op) {
-    switch (op->op_type) { 	/* sync this list with B::CC */
-    case OP_AND:
-    case OP_OR:
-#if PERL_VERSION > 8
-    case OP_DOR:
-    case OP_DORASSIGN:
-#endif
-    case OP_COND_EXPR:
-    case OP_ANDASSIGN:
-    case OP_ORASSIGN:
-	return 1;
-    default:
-	return 0;
-    }
-}
-
 CODE *
 call_abs (CODE *code, void *addr) {
     /* intel specific: */
@@ -928,7 +910,9 @@ jit_chain(pTHX_
                 }
 		/* dbg_lines1("if (PL_op == op) goto next_%d;", global_label); */
 	    }
-	    if ((PL_opargs[op->op_type] & OA_CLASS_MASK) == OA_LOGOP) {
+	    if (((PL_opargs[op->op_type] & OA_CLASS_MASK) == OA_LOGOP) 
+                && (op->op_type != OP_ENTERTRY))
+            {
                 if (dryrun) {
                     int i = JIT_CHAIN_DRYRUN(cLOGOPx(op)->op_other);
                     size += i + sizeof_maybranch_check(i);
@@ -1151,12 +1135,6 @@ jit_chain(pTHX_
 #endif
                     break;
 
-		default:
-                    if (!dryrun) {
-                        DEBUG_v( printf("NYI unsupported maybranch op %s\n", PL_op_name[op->op_type]) );
-                    }
-                    break;
-
                 /* goto and other search at run-time 
                    for possible jump targets in jmptargets info.
                    If no cx record is found, continue with the unjitted OP.
@@ -1210,28 +1188,45 @@ jit_chain(pTHX_
                         dbg_lines1("next_%d", global_label);
                     }
                     break;
-		}
+
+                /* cx->blk_sub|eval|format.retop */
+                case OP_RETURN:
+
+                /* cx->blk_eval.retop */
+                case OP_ENTEREVAL:
+                case OP_ENTERTRY:
+
+                /* cx->blk_givwhen.leaveop */
+                case OP_LEAVEEVAL:
+
+		default:
+                    if (!dryrun) {
+                        DEBUG_v( printf("NYI unsupported maybranch op %s\n", PL_op_name[op->op_type]) );
+                    }
+                    break;
+
 	    }
 #ifdef DEBUGGING
             global_label++;
 #endif
-	}
-    NEXT:
-        if (stopop) { /* entersub  loop until some op_next? */
-            if (dryrun) {
+            }
+        NEXT:
+            if (stopop) { /* entersub  loop until some op_next? */
+                if (dryrun) {
                 size += sizeof(maybranch_check);
                 size += sizeof(GOTOREL);
-            } else {
-                DEBUG_v( printf("#  check !PL_op or PL_op 0x%x != op->next 0x%x (entersub)\n",
-                                opnext, stopop));
-                int i = sizeof(maybranch_check);
-                i += sizeof(GOTOREL);
-                code = push_maybranch_check(code, i);
-                code = push_gotorel(code, jumpsize);
-                dbg_lines1("if (PL_op == op) goto next_%d;", global_label);
-            }
-            if (stopop == opnext) goto OUT;
-        }
+                } else {
+                    DEBUG_v( printf("#  check !PL_op or PL_op 0x%x != op->next 0x%x (entersub)\n",
+                                    opnext, stopop));
+                    int i = sizeof(maybranch_check);
+                    i += sizeof(GOTOREL);
+                    code = push_maybranch_check(code, i);
+                    code = push_gotorel(code, jumpsize);
+                    dbg_lines1("if (PL_op == op) goto next_%d;", global_label);
+                }
+                if (stopop == opnext) goto OUT;
+            } /* stopop */
+        } /* maybranch */
     } while (op = opnext);
  OUT:
     if (dryrun) { 
