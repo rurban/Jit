@@ -66,7 +66,8 @@ Dump of assembler code from 0x1127000 to 0x1127058:
 */
 
 T_CHARARR amd64_prolog[] = {
-    enter_8
+    enter_8,
+    push_rbx
 #ifdef HAVE_DISPATCH
     ,push_rcx		/* volatile, but ok for &PL_sig_pending check */
 #endif
@@ -109,9 +110,9 @@ T_CHARARR amd64_jmp[]   = {0xff,0x25}; /* jmp *$PL_op->op_ppaddr */
 T_CHARARR amd64_save_plop[]  = {
     /*mov_eax_rebx*/    /* fails on amd64 */
     mov_rax_memr	/* mov    %rax,memrel #save new PL_op */
-};      
+};
 T_CHARARR amd64_nop[]        = {0x90};      /* pad */
-T_CHARARR amd64_nop2[]       = {0x90,0x90};      /* jmp pad */
+T_CHARARR amd64_nop2[]       = {0x90,0x90}; /* jmp pad */
 T_CHARARR amd64_dispatch_getsig[] = {
     mov_mem_rcx};
 T_CHARARR amd64_dispatch[] = {
