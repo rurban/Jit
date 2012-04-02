@@ -1,4 +1,9 @@
-v0.04_10
+v0.05 2012-04-02 rurban
+
+cleanup ptr conversions
+fixed amd64 non-threaded
+
+v0.04_10 2010-12-13 rurban
 
 remove unused returnother, LOGOP wo/ entertry it is
 
@@ -53,7 +58,7 @@ t/2.t works now mostly, t/3.t not yet working
 
 v0.04_04 2010-11-15 rurban
 
-enabled HAVE_DISPATCH on i386, tested ok on i386 threaded and unthreaded.
+enabled HAVE_DISPATCH on i386, tested ok on i386 threaded and non-threaded.
 on amd64 untested.
 
 v0.04_03 2010-11-14 rurban

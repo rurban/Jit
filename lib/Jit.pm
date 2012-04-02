@@ -1,6 +1,6 @@
 #      perl5 runloop jit
 #
-#      Copyright (c) 2010 Reini Urban
+#      Copyright (c) 2010,2012 Reini Urban
 #
 #      You may distribute under the terms of either the GNU General Public
 #      License or the Artistic License, as specified in the README file.
@@ -8,7 +8,7 @@
 #      Assemble into a mprotected string and call into it instead of the runloop
 
 package Jit;
-our $VERSION = '0.04_10';
+our $VERSION = '0.05';
 require DynaLoader;
 use vars qw( @ISA $VERSION );
 @ISA = qw(DynaLoader);
