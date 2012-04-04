@@ -24,6 +24,10 @@
 #if defined(DEBUGGING) && defined(__GNUC__)
 #include <sys/stat.h>
 #endif
+#if defined(DEBUGGING)	\
+    && !(defined(_WIN32) || (defined(__CYGWIN__) && (__GNUC__ > 3)) || defined(AIX))
+#define HAVE_DEBOP
+#endif
 
 /* sync with lib/Jit.pm */
 #define HINT_JIT_FLAGS 0x04000000
@@ -735,7 +739,7 @@ jit_chain(pTHX_
             }
         }
 # endif
-# if defined(DEBUG_t_TEST_)
+# if defined(DEBUG_t_TEST_) && defined(HAVE_DEBOP)
         if (DEBUG_t_TEST_ && op) {
             T_CHARARR push_arg1[] = { push_arg1_mem };
 #  ifdef USE_ITHREADS
@@ -1097,7 +1101,7 @@ jit_chain(pTHX_
 #endif
                         code = push_maybranch_check(code, size); /* if cmp: je => next */
 
-#if defined(DEBUG_t_TEST_)
+#if defined(DEBUG_t_TEST_) && defined(HAVE_DEBOP)
                         if (DEBUG_t_TEST_ && op) {
                             T_CHARARR push_arg1[] = { push_arg1_eax };
 # ifdef USE_ITHREADS
@@ -1235,12 +1239,13 @@ jit_chain(pTHX_
                     code = push_gotorel(code, jumpsize);
                     dbg_lines1("if (PL_op == op) goto next_%d;", global_label);
                 }
-                if (stopop == opnext) goto OUT;
+                if (stopop == opnext)
+		    opnext = NULL;
             } /* stopop */
         } /* maybranch */
 	op = opnext;
     } while (op);
- OUT:
+
     if (dryrun) { 
         op = startop;
         return size;
@@ -1280,6 +1285,9 @@ Perl_runops_jit(pTHX)
     CODE *code, *code_start;
     OP *root;
     int pagesize = 4096, size = 0;
+    int dojit;
+    SV *enable, *cursubname;
+    HV *only, *ignore;
 #ifdef PROFILING
     SV *sv_prof;
     NV bench;
@@ -1289,11 +1297,59 @@ Perl_runops_jit(pTHX)
         profiling = SvIV_nomg(sv_prof);
     }
 #endif
-
-    if (!(PL_hints & HINT_JIT_FLAGS)) {
-        register OP* op;
-        while ((PL_op = op = op->op_ppaddr(aTHX))) {
-        }
+#if 0
+    enable = get_sv("Jit::ENABLE", 0);
+    ignore = get_hv("Jit::IGNORE", 0);
+#endif
+    dojit = SvIV(enable);
+    if (dojit) {
+#if 0
+	/* Find the name of the current package::function (cv->root/PL_eval_root/PL_main_root) 
+	   and compare it with the IGNORE hash entries.
+	   Problem: How to find the CV from PL_op? (called by entersub, entertry or main)
+	   PL_op is typically just nextstate
+	 */
+	if (ignore && HvKEYS(ignore)) {
+	    cursubname = find_cv(PL_op);
+	    HE *entry;
+	    hv_iterinit(ignore);
+	    while ((entry = hv_iternext(ignore))) {
+		match = HeVAL(entry);
+	    }
+	}
+#endif
+    } else {
+	/* Enabled in this scope. (Do not know how PL_hints work yet) */
+	dojit = PL_hints & HINT_JIT_FLAGS;
+#if 0
+	only   = get_hv("Jit::ONLY", 0);
+	if (only && HvKEYS(only)) {
+	}
+#endif
+    }
+    if (!dojit) {
+	DEBUG_l(Perl_deb(aTHX_ "Entering new RUNOPS (unjitted)\n"));
+	do {
+#if PERL_VERSION < 13
+	    PERL_ASYNC_CHECK();
+#endif
+	    if (PL_debug) {
+		if (PL_watchaddr && (*PL_watchaddr != PL_watchok))
+		    PerlIO_printf(Perl_debug_log,
+				  "WARNING: %"UVxf" changed from %"UVxf" to %"UVxf"\n",
+				  PTR2UV(PL_watchaddr), PTR2UV(PL_watchok),
+				  PTR2UV(*PL_watchaddr));
+#if defined(DEBUGGING) && defined(HAVE_DEBOP)
+# if (PERL_VERSION > 7)
+		if (DEBUG_s_TEST_) debstack();
+		if (DEBUG_t_TEST_) debop(PL_op);
+# else
+		DEBUG_s(debstack());
+		DEBUG_t(debop(PL_op));
+# endif
+#endif
+	    }
+	} while ((PL_op = PL_op->op_ppaddr(aTHX)));
         TAINT_NOT;
         return 0;
     }
@@ -1463,7 +1519,9 @@ Perl_runops_jit(pTHX)
 #if defined(DEBUGGING) && defined(DEBUG_v_TEST)
     if (DEBUG_v_TEST) {
         DEBUG_v( printf("# &PL_op   \t= 0x%x / *0x%x\n", PTR2X(&PL_op), PTR2X(PL_op)) );
+# if defined(HAVE_DEBOP)
         DEBUG_t( printf("# debop   \t= 0x%x\n", PTR2X(&Perl_debop)) );
+# endif
 # ifdef USE_ITHREADS
         DEBUG_v( printf("# &my_perl \t= 0x%x / *0x%x\n", PTR2X(&my_perl), PTR2X(my_perl)) );
 # endif
@@ -1567,7 +1625,6 @@ MODULE=Jit 	PACKAGE=Jit
 PROTOTYPES: DISABLE
 
 BOOT:
-    unsigned long hints;
 #ifdef DEBUGGING
 # ifdef __GNUC__
     struct stat statbuf;
@@ -1581,8 +1638,6 @@ BOOT:
 #ifdef JIT_CPU
     sv_setsv(get_sv("Jit::HINT_JIT_FLAGS", GV_ADD), newSViv(HINT_JIT_FLAGS));
     sv_setsv(get_sv("Jit::CPU", GV_ADD), newSVpv(JIT_CPU, 0));
-    /* jit main::* ? */
-    if (PL_hints & HINT_JIT_FLAGS) {
-      PL_runops = Perl_runops_jit;
-    }
+
+    PL_runops = Perl_runops_jit;
 #endif

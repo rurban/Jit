@@ -8,11 +8,12 @@
 #      Assemble into a mprotected string and call into it instead of the runloop
 
 package Jit;
-our $VERSION = '0.05';
+our $VERSION = '0.05_01';
 require DynaLoader;
 use vars qw( @ISA $VERSION );
 @ISA = qw(DynaLoader);
 my (%only, %ignore);
+our $ENABLE;
 
 Jit->bootstrap($VERSION);
 
@@ -20,9 +21,11 @@ Jit->bootstrap($VERSION);
 sub import {
   shift;
   if (@_) {
-    warn "use Jit names... not yet implemented\n";
-    for (@_) { $Jit::only{$_} = 1; }
+    $ENABLE = 0;
+    warn "use Jit (names...) not yet implemented\n";
+    for (@_) { $Jit::ONLY{$_} = 1; }
   } else {
+    $ENABLE = 1;
     $^H |= $Jit::HINT_JIT_FLAGS;
   }
 }
@@ -30,11 +33,13 @@ sub import {
 sub unimport {
   shift;
   if (@_) {
-    warn "no Jit names... not yet implemented\n";
-    for (@_) { $Jit::ignore{$_} = 1; }
+    $ENABLE = 1;
+    warn "no Jit (names...) not yet implemented\n";
+    for (@_) { $Jit::IGNORE{$_} = 1; }
   } else {
+    $ENABLE = 0;
     $^H &= ~ $Jit::HINT_JIT_FLAGS;
-    warn "{ no Jit; ... } lexical-scope jitting not yet implemented\n";
+    # warn "{ no Jit; ... } lexical-scope jitting not yet implemented\n";
   }
 }
 
