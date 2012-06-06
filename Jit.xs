@@ -818,17 +818,17 @@ jit_chain(pTHX_
             /* first jit the sub, then loop through it.
                loop CvROOT until !PL_op */
             /*OP* next = Perl_pp_entersub(aTHX); / * find CvSTART */
-            UNOP* next = cUNOPx(op)->op_first;
+            OP* next = cUNOPx(op)->op_first;
             if (next) {
-                next = (UNOP*)(next->op_next);
+                next = next->op_next;
                 if (dryrun) {
-                    size += JIT_CHAIN_FULL_DRYRUN((OP*)next, opnext);
+                    size += JIT_CHAIN_FULL_DRYRUN(next, opnext);
                 } else {
                     int lsize;
                     DEBUG_v( printf("#  entersub() => op=0x%x\n", PTR2X(next)));
                     dbg_lines1("sub_%d: {", global_label);
-                    lsize = JIT_CHAIN_FULL_DRYRUN((OP*)next, opnext);
-                    code  = JIT_CHAIN_FULL((OP*)next, lsize, opnext);
+                    lsize = JIT_CHAIN_FULL_DRYRUN(next, opnext);
+                    code  = JIT_CHAIN_FULL(next, lsize, opnext);
                     dbg_lines("}");
                     dbg_lines1("next_%d:", global_label);
                 }
@@ -1408,7 +1408,7 @@ Perl_runops_jit(pTHX)
     pagesize = getpagesize();
 # endif
 # ifdef HAVE_MEMALIGN
-    code = (char*)memalign(pagesize, size*sizeof(char));
+    code = (CODE*)memalign(pagesize, size*sizeof(char));
 # else
 #  ifdef HAVE_POSIX_MEMALIGN
     if (posix_memalign((void**)&code, pagesize, size*sizeof(char))) {
@@ -1418,11 +1418,11 @@ Perl_runops_jit(pTHX)
     /* e.g. openbsd has no memalign, but aligns automatically to page boundary 
        if the size is "big enough", around the pagesize. */
     if (size < pagesize) size = pagesize;
-    code = (char*)malloc(size);
+    code = (CODE*)malloc(size);
     if ((int)code & (pagesize-1)) { /* need to align it manually to 0x1000 */
         int newsize = pagesize - ((int)code & (pagesize-1));
         free(code);
-        code = (char*)malloc(size + newsize);
+        code = (CODE*)malloc(size + newsize);
         DEBUG_v( printf("# manually align code=0x%x newsize=%x\n",PTR2X(code), PTR2X(size + newsize)) );
         if ((int)code & (pagesize-1)) {
             /* hardcode pagesize = 4096 */
