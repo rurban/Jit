@@ -131,10 +131,10 @@ CODE *jmp_search_label(OP* op);
 
 #ifdef USE_ITHREADS
 /* first arg already my_perl, and already on stack */
-#  define PUSH_1ARG_DRYRUN  size += sizeof(push_arg2)
+#  define PUSH_1ARG_DRYRUN   size += sizeof(push_arg2)
 #  define PUSH_1ARG  	     PUSHc(push_arg2)
 #else
-#  define PUSH_1ARG_DRYRUN  size += sizeof(push_arg1)
+#  define PUSH_1ARG_DRYRUN   size += sizeof(push_arg1)
 #  define PUSH_1ARG  	     PUSHc(push_arg1)
 #endif
 
@@ -666,7 +666,7 @@ CODE *
 call_abs (CODE *code, void *addr) {
     /* intel specific: */
     register signed long rel = (CODE*)addr - code - sizeof(CALL) - CALL_SIZE;
-    if (rel > (unsigned int)PERL_ULONG_MAX) {
+    if ((CALL_ALIGN == 4) && (rel > (unsigned int)PERL_ULONG_MAX)) {
 	PUSHc(JMP);
 	PUSHcall(addr);
 	/* 386 far calls prefer 2 nop's afterwards, align it to 4 (0,4,8,c)*/
@@ -1376,8 +1376,7 @@ Perl_runops_jit(pTHX)
         bench = mytime();
     }
 #endif
-    size = 0;
-    size += sizeof(PROLOG);
+    size = sizeof(PROLOG);
     size += JIT_CHAIN_DRYRUN(PL_op);
     size += sizeof(EPILOG);
     while ((size | 0xfffffff0) % PTRSIZE) { 
