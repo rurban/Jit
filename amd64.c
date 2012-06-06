@@ -7,8 +7,8 @@ PL_op in %rax, &PL_op in %rbx, &PL_sig_pending in %rcx
   53                    push   %rbx
   51                    push   %rcx
   31 c0			xor    %eax, %eax
-  48 89 1d xx xx xx xx  mov    PL_op@GOTPCREL(%rip),%rbx
-  48 89 1e xx xx xx xx  mov    PL_sig_pending@GOTPCREL(%rip),%rcx
+  48 8b 1d xx xx xx xx  mov    PL_op@GOTPCREL(%rip),%rbx
+  48 8b 1e xx xx xx xx  mov    PL_sig_pending@GOTPCREL(%rip),%rcx
 
   e8 xx xx xx xx       	call   Perl_pp_enter@PLT
   48 98                	cltq
@@ -71,9 +71,10 @@ T_CHARARR amd64_prolog[] = {
 #ifdef HAVE_DISPATCH
     ,push_rcx		/* volatile, but ok for &PL_sig_pending check */
 #endif
+    ,mov_mem_rbx, fourbyte
     /*,push_r12*/ 	/* op->next */
 #ifdef HAVE_DISPATCH	/* &PL_sig_pending */
-    ,mov_mem_ecx, fourbyte
+    ,mov_mem_rcx, fourbyte
 #endif
 };
 
@@ -84,11 +85,13 @@ unsigned char *push_prolog(unsigned char *code) {
 #ifdef HAVE_DISPATCH
 	,push_rcx
 #endif
-        /*,push_r12*/};
+	,mov_mem_rbx
+        };
     PUSHc(prolog1);
+    PUSHrel(&PL_op);
 #ifdef HAVE_DISPATCH
     T_CHARARR prolog2[] = {
-	mov_mem_ecx};
+	mov_mem_rcx};
     PUSHc(prolog2);
     PUSHrel(&PL_sig_pending);
 #endif
@@ -108,8 +111,7 @@ T_CHARARR amd64_call[]  = {
     0xe8}; /* callq PL_op->op_ppaddr@PLT */
 T_CHARARR amd64_jmp[]   = {0xff,0x25}; /* jmp *$PL_op->op_ppaddr */
 T_CHARARR amd64_save_plop[]  = {
-    /*mov_eax_rebx*/    /* fails on amd64 */
-    mov_rax_memr	/* mov    %rax,memrel #save new PL_op */
+    mov_rax_rrbx	/* mov    %rax,memrel #save new PL_op */
 };
 T_CHARARR amd64_nop[]        = {0x90};      /* pad */
 T_CHARARR amd64_nop2[]       = {0x90,0x90}; /* jmp pad */

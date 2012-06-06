@@ -262,6 +262,7 @@ T_CHARARR NOP[]      = {0x90};    /* nop */
 #define push_rcx	0x51
 #define push_rbx 	0x53
 #define push_rbp    	0x55
+/* wrong! XXX */
 #define mov_rsp_rbp 	0x48,0x89,0xe5
 #define push_r12 	0x41,0x54
 #define mov_rax_rbx     0x48,0x89,0xc3
@@ -269,7 +270,7 @@ T_CHARARR NOP[]      = {0x90};    /* nop */
 #define add_x_esp(byte) 0x48,0x83,0xc4,byte
 #define fourbyte        0x00,0x00,0x00,0x00
 #define mov_mem_eax(m)	0xa1,revword(m)
-/* mov    $memabs,(%ebx) &PL_op in ebx */
+/* mov    $memabs,(%rbx) &PL_op to ebx */
 #define mov_mem_rbx     0x48,0x8b,0x1d /* mov &PL_op,%rbx */
 #define mov_rebp_ebx(byte) 0x8b,0x5d,byte  /* mov 0x8(%ebp),%ebx*/
 #define mov_rrsp_rbx    0x48,0x8b,0x1c,0x24    /* mov    (%rsp),%rbx ; my_perl from stack to rbx */
@@ -348,8 +349,8 @@ T_CHARARR NOP[]      = {0x90};    /* nop */
 #define jmpq_0   	0xe9        /* maybranch */
 #define jmpq(word)   	0xe9,revword(word)
 
-/* mov    %rax,(%rbx) &PL_op in ebx */
-#define mov_rax_memr    0x48,0x89,0x05 /* + 4 rel */
+/* mov    %rax,(%rbx) &PL_op in rbx */
+#define mov_rax_rrbx    0x48,0x89,0x03
 #define mov_eax_rebx    0x89,0x03
 #define mov_4ebp_edx    0x8b,0x55,0xfc
 #define mov_reax_ebx    0x48,0x8b,0x18
@@ -859,14 +860,8 @@ jit_chain(pTHX_
 	}
 	if (dryrun) {
 	    size += sizeof(SAVE_PLOP);
-#if defined(JIT_CPU_AMD64) && !defined(USE_ITHREADS)
-            size += MOV_SIZE;
-#endif
 	} else {
 	    PUSHc(SAVE_PLOP);
-#if defined(JIT_CPU_AMD64) && !defined(USE_ITHREADS)
-	    PUSHrel(&PL_op);
-#endif
 	}
 
 #ifdef HAVE_DISPATCH
@@ -1078,9 +1073,6 @@ jit_chain(pTHX_
                         size += sizeof(add_eax_ppaddr);
                         size += sizeof(call_eax);
                         size += sizeof(SAVE_PLOP);
-#if defined(JIT_CPU_AMD64) && !defined(USE_ITHREADS)
-			size += MOV_SIZE;
-#endif
                     } else {
 			size = 0;
                         DEBUG_v( printf("# entersub: call unjitted sub\n") );
@@ -1096,9 +1088,6 @@ jit_chain(pTHX_
                         /* else call unjitted retval */
 			size = sizeof(add_eax_ppaddr) + sizeof(call_eax);
                         size += sizeof(SAVE_PLOP);
-#if defined(JIT_CPU_AMD64) && !defined(USE_ITHREADS)
-			size += MOV_SIZE;
-#endif
                         code = push_maybranch_check(code, size); /* if cmp: je => next */
 
 #if defined(DEBUG_t_TEST_) && defined(HAVE_DEBOP)
@@ -1122,9 +1111,6 @@ jit_chain(pTHX_
                         PUSHc(add_eax_ppaddr); /* ppaddr offset from %eax */
                         PUSHc(call_eax);
                         PUSHc(SAVE_PLOP);
-#if defined(JIT_CPU_AMD64) && !defined(USE_ITHREADS)
-			PUSHrel(&PL_op);
-#endif
                         dbg_lines1("next_%d:", global_label); 
                     }
                     break;
@@ -1372,7 +1358,7 @@ Perl_runops_jit(pTHX)
 #ifdef DEBUGGING
     fh = fopen("run-jit.c", "a");
     fprintf(fh,
-            "struct op { OP* op_next; OP* op_other } OP;"
+            "struct op {struct op* op_next;struct op* op_other};typedef struct op OP;"
 # ifdef USE_ITHREADS
 	    "struct PerlInterpreter { OP* IOp; int Isig_pending; };"
 # endif
@@ -1453,7 +1439,7 @@ Perl_runops_jit(pTHX)
 # ifdef USE_ITHREADS
     fprintf(stabs, ".stabs \"PerlInterpreter:S(0,12)\",38,0,0,%p\n", /* variable in data section */
 #  ifdef MOV_REL
-            0 /*(CODE*)&my_perl - code*/
+            NULL /*(CODE*)&my_perl - code*/
 #  else
             (char*)&my_perl
 #  endif
