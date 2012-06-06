@@ -207,24 +207,24 @@ threaded, same logic as above, just:
 #define PUSHbyte(byte) { signed char b = (byte); *code++ = b; }
 
 #ifdef DEBUGGING
-# define dbg_cline(p1)     fprintf(fh, p1); line++
-# define dbg_cline1(p1,p2) fprintf(fh, p1, p2); line++
+# define dbg_cline(p)     fprintf(fh,"%s\n",p); line++
+# define dbg_cline1(s,a) fprintf(fh, s, a); line++
 #else
-# define dbg_cline(p1)
+# define dbg_cline(p)
 # define dbg_cline1(p1,p2)
 #endif
 
 #if defined(__GNUC__) && defined(DEBUGGING)
-# define dbg_stabs(s)      fprintf(stabs, ".stabn 68,0,%d,%l /* "s" */\n", line, code-code_start)
-# define dbg_stabs1(s,p1)  fprintf(stabs, ".stabn 68,0,%d,%l /* "s" */\n", line, code-code_start, p1)
-# define dbg_lines(s) 	   dbg_cline(s"\n"); dbg_stabs(s)
-# define dbg_lines1(s, p1) dbg_cline1(s"\n", p1); dbg_stabs1(s, p1)
+# define dbg_stabs(s)      fprintf(stabs, ".stabn 68,0,%d,%u /* %s */\n", line, code-code_start, s) 
+# define dbg_stabs1(s,p1)  fprintf(stabs, ".stabn 68,0,%d,%u /* %s */\n", line, code-code_start, s)
+# define dbg_lines(s) 	   dbg_cline(s); dbg_stabs(s)
+# define dbg_lines1(s, p1) dbg_cline1(s, p1); dbg_stabs1(s, p1)
 #else
 # define dbg_stabs(s)
 # define dbg_stabs1(s,p1)
 # ifdef DEBUGGING
-#  define dbg_lines(s)		dbg_cline(s"\n");
-#  define dbg_lines1(s, p1)	dbg_cline1(s"\n", p1); 
+#  define dbg_lines(s)		dbg_cline(s)
+#  define dbg_lines1(s, p1)	dbg_cline1(s, p1)
 # else
 #  define dbg_lines(s)
 #  define dbg_lines1(s, p1)
@@ -773,7 +773,7 @@ jit_chain(pTHX_
 #else
                 label = cCOPx(op)->cop_label;
 #endif
-		if (*label) {
+		if (label && *label) {
                     cx.op = op;
                     cx.label = label;
                     cx.target = code;
@@ -840,7 +840,7 @@ jit_chain(pTHX_
 		size += sizeof(maybranch_plop);
 	    } else {
                 /* store op->next at 0(%esp). Later cmp returned op == op->next => jmp */
-                DEBUG_v( printf("# maybranch %s 0x%x:\n", opname, op->op_ppaddr));
+                DEBUG_v( printf("# maybranch %s 0x%p:\n", opname, op->op_ppaddr));
                 dbg_lines("op = PL_op->op_next;");
 		code = push_maybranch_plop(code, opnext);
 	    }
@@ -1297,7 +1297,7 @@ Perl_runops_jit(pTHX)
         profiling = SvIV_nomg(sv_prof);
     }
 #endif
-#if 0
+#if 1
     enable = get_sv("Jit::ENABLE", 0);
     ignore = get_hv("Jit::IGNORE", 0);
 #endif
