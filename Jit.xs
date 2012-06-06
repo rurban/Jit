@@ -1621,9 +1621,9 @@ BOOT:
         unlink("run-jit.s");
 # endif
 #endif
+
 #ifdef JIT_CPU
     sv_setsv(get_sv("Jit::HINT_JIT_FLAGS", GV_ADD), newSViv(HINT_JIT_FLAGS));
     sv_setsv(get_sv("Jit::CPU", GV_ADD), newSVpv(JIT_CPU, 0));
-
     PL_runops = Perl_runops_jit;
 #endif
