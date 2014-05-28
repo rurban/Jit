@@ -127,7 +127,7 @@ CODE *jmp_search_label(OP* op);
 #   define DEBUG_v(x)
 # endif
 #endif
-#define PTR2X(ptr) INT2PTR(unsigned int,ptr)
+#define PTR2X(ptr) INT2PTR(long, ptr)
 
 #ifdef USE_ITHREADS
 /* first arg already my_perl, and already on stack */
@@ -478,7 +478,7 @@ T_CHARARR gotorel[] = {
     jmpq(0)
 };
 CODE *
-push_gotorel(CODE *code, int label) {
+push_gotorel(CODE *code, long label) {
     CODE gotorel[] = {
 	jmpq_0};
     PUSHc(gotorel);
@@ -515,7 +515,7 @@ T_CHARARR ifop0gotow[] = {
     jew_0, fourbyte
 };
 CODE *
-push_ifop0goto(CODE *code, int next) {
+push_ifop0goto(CODE *code, long next) {
     CODE ifop0goto[] = {
         test_eax_eax,
 	je_0};
@@ -705,7 +705,7 @@ jit_chain(pTHX_
 	  )
 {
     int dryrun = !code;
-    int size = 0;
+    long size = 0;
     OP *startop = op;
     OP *opnext;
 #ifdef DEBUGGING
@@ -825,7 +825,7 @@ jit_chain(pTHX_
                 if (dryrun) {
                     size += JIT_CHAIN_FULL_DRYRUN(next, opnext);
                 } else {
-                    int lsize;
+                    long lsize;
                     DEBUG_v( printf("#  entersub() => op=0x%x\n", PTR2X(next)));
                     dbg_lines1("sub_%d: {", global_label);
                     lsize = JIT_CHAIN_FULL_DRYRUN(next, opnext);
@@ -907,7 +907,7 @@ jit_chain(pTHX_
                 if (hv_exists_ent(otherops1, keysv, 0)) {
                     goto NEXT;
                 } else {
-                    hv_store_ent(otherops1, keysv, newSViv((int)code), 0);
+                    hv_store_ent(otherops1, keysv, newSViv(PTR2IV(code)), 0);
                 }
             } else {
                 if (hv_exists_ent(otherops, keysv, 0)) {
@@ -916,7 +916,7 @@ jit_chain(pTHX_
                     /* XXX when is a jmp to this op needed? patch later or use the code addr from the hash */
                     goto NEXT;
                 } else {
-                    hv_store_ent(otherops, keysv, newSViv((int)code), 0);
+                    hv_store_ent(otherops, keysv, newSViv(PTR2IV(code)), 0);
                 }
 		/* dbg_lines1("if (PL_op == op) goto next_%d;", global_label); */
 	    }
@@ -928,7 +928,7 @@ jit_chain(pTHX_
                     size += i + sizeof_maybranch_check(i);
                     size += sizeof(GOTOREL);
                 } else {
-                    int next, other;
+                    long next, other;
                     LOGOP* logop;
                     logop = cLOGOPx(op);
                     DEBUG_v( printf("# other_%d: %s => %s, ", global_label,
@@ -1062,7 +1062,7 @@ jit_chain(pTHX_
                         else if (op->op_type == OP_REDO) tgtop = cx->redoop;
                         else if (op->op_type == OP_LAST) tgtop = cx->lastop;
                         DEBUG_v( printf("# %s %x\n", PL_op_name[op->op_type], PTR2X(tgtop)));
-                        code = push_gotorel(code, (int)tgtop); /* jmp or rel? */
+                        code = push_gotorel(code, (long)tgtop); /* jmp or rel? */
                     }
                     break;
 		case OP_ENTERSUB:
@@ -1184,7 +1184,7 @@ jit_chain(pTHX_
 
                         dbg_lines("if (jumptgt) goto jumptgt");
                         dbg_lines("else (PL_op->op_ppaddr)();"); /* not found, continue unjitted */
-                        code = push_gotorel(code, (int)jumptgt);
+                        code = push_gotorel(code, (long)jumptgt);
 
                         dbg_lines1("next_%d", global_label);
                     }
@@ -1458,7 +1458,7 @@ Perl_runops_jit(pTHX)
     PL_op = root;
     code = JIT_CHAIN(PL_op);
     PUSHc(EPILOG);
-    while (((unsigned int)code | 0xfffffff0) % PTRSIZE) { *(code++) = NOP[0]; }
+    while (((unsigned long)code | 0xfffffff0) % PTRSIZE) { *(code++) = NOP[0]; }
     /* XXX TODO patchup missed jmp or sub or loop targets */
 
 #ifdef PROFILING

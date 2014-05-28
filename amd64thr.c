@@ -91,7 +91,7 @@ T_CHARARR maybranch_checkw[] = {
     jew(0)
 };
 unsigned char *
-push_maybranch_check(unsigned char *code, int next) {
+push_maybranch_check(unsigned char *code, long next) {
     CODE maybranch_check[] = {
 	cmp_eax_rebp8,
 	je_0};

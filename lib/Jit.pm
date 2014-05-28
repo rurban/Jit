@@ -1,6 +1,6 @@
 #      perl5 runloop jit
 #
-#      Copyright (c) 2010,2012 Reini Urban
+#      Copyright (c) 2010,2012,2014 Reini Urban
 #
 #      You may distribute under the terms of either the GNU General Public
 #      License or the Artistic License, as specified in the README file.
@@ -99,7 +99,7 @@ Reini Urban C<perl-compiler@googlegroups.com> written from scratch.
 
 =head1 LICENSE
 
-Copyright (c) 2010 Reini Urban
+Copyright (c) 2010,2012,2014 Reini Urban
 
 You may distribute under the terms of either the GNU General Public
 License or the Artistic License, as specified in the README file.
