@@ -1562,17 +1562,13 @@ Perl_runops_jit(pTHX)
         fwrite(code,size,1,fh);
         fclose(fh);
 #ifdef __APPLE__
-# if 0
-        system("otool -tV -mcpu="
+        system("ndisasm -b "
 #  ifdef JIT_CPU_AMD64
-               "x86-64"
+               "32"
 #  else
-               "i686"
+               "16"
 #  endif
                " run-jit.bin");
-# else
-        system("ndisasm run-jit.bin");
-# endif
 #else
         system("objdump -D --target=binary --architecture i386"
 #  ifdef JIT_CPU_AMD64
